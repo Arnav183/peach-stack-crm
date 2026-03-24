@@ -43,11 +43,11 @@ export default function Login({ onLogin }: LoginProps) {
         {/* Brand */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center gap-2.5 mb-5">
-            <div className="w-10 h-10 bg-zinc-900 rounded-xl flex items-center justify-center text-white font-bold text-xs tracking-tight shadow-lg">
-              404
+            <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white font-bold text-xs tracking-tight shadow-lg">
+              PS
             </div>
             <div className="text-left">
-              <p className="font-bold text-zinc-900 text-lg leading-none tracking-tight">404 Labs</p>
+              <p className="font-bold text-zinc-900 text-lg leading-none tracking-tight">Peach Stack</p>
               <p className="text-[10px] text-zinc-400 font-medium uppercase tracking-widest">CRM Platform</p>
             </div>
           </div>
@@ -55,7 +55,7 @@ export default function Login({ onLogin }: LoginProps) {
           <p className="text-zinc-500 mt-1 text-sm">Sign in to manage your business</p>
         </div>
 
-        {/* Form card */}
+        {/* Form */}
         <div className="bg-white p-8 rounded-2xl shadow-sm border border-zinc-200">
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
@@ -65,7 +65,7 @@ export default function Login({ onLogin }: LoginProps) {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-lg border border-zinc-200 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent transition-all text-sm"
+                className="w-full px-4 py-2.5 rounded-lg border border-zinc-200 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition-all text-sm"
                 placeholder="you@example.com"
               />
             </div>
@@ -76,7 +76,7 @@ export default function Login({ onLogin }: LoginProps) {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-lg border border-zinc-200 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent transition-all text-sm"
+                className="w-full px-4 py-2.5 rounded-lg border border-zinc-200 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition-all text-sm"
                 placeholder="••••••••"
               />
             </div>
@@ -93,7 +93,7 @@ export default function Login({ onLogin }: LoginProps) {
           </form>
         </div>
 
-        {/* Demo credentials box */}
+        {/* Demo credentials */}
         <div className="mt-5 p-4 bg-white rounded-xl border border-zinc-200 shadow-sm">
           <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">Demo credentials</p>
           <p className="text-sm text-zinc-600 font-mono">admin@example.com</p>
@@ -101,8 +101,9 @@ export default function Login({ onLogin }: LoginProps) {
         </div>
 
         <p className="text-center mt-5 text-xs text-zinc-400">
-          Built by <span className="font-semibold text-zinc-600">404 Labs</span>
+          Built by <span className="font-semibold text-zinc-600">Peach Stack</span>
         </p>
+
       </div>
     </div>
   );
