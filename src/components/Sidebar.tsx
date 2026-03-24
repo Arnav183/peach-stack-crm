@@ -42,13 +42,14 @@ export default function Sidebar({ user, onLogout }: SidebarProps) {
   return (
     <aside className="w-64 bg-white border-r border-zinc-200 flex flex-col h-screen sticky top-0">
       <div className="p-6 flex flex-col h-full">
+
         {/* Brand */}
         <div className="flex items-center gap-2.5 mb-8">
-          <div className="w-8 h-8 bg-zinc-900 rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-lg tracking-tight">
-            404
+          <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center text-white font-bold text-xs tracking-tight shadow-lg">
+            PS
           </div>
           <div>
-            <span className="font-bold text-base tracking-tight text-zinc-900">404 Labs</span>
+            <span className="font-bold text-base tracking-tight text-zinc-900">Peach Stack</span>
             <p className="text-[10px] text-zinc-400 font-medium uppercase tracking-widest -mt-0.5">CRM</p>
           </div>
         </div>
@@ -60,7 +61,7 @@ export default function Sidebar({ user, onLogout }: SidebarProps) {
             <input
               type="text"
               placeholder="Quick search..."
-              className="w-full pl-9 pr-4 py-2 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent transition-all"
+              className="w-full pl-9 pr-4 py-2 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition-all"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
@@ -122,6 +123,7 @@ export default function Sidebar({ user, onLogout }: SidebarProps) {
             Logout
           </button>
         </div>
+
       </div>
     </aside>
   );
