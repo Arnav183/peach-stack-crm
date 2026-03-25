@@ -2,6 +2,10 @@
 builder = "nixpacks"
 buildCommand = "npm run build"
 
+[build.environment]
+NODE_VERSION = "20"
+NPM_CONFIG_PYTHON = "/usr/bin/python3"
+
 [deploy]
 startCommand = "npm run start"
 healthcheckPath = "/"
