@@ -1,4 +1,4 @@
-import express from "express";
+fix: serve SPA index.html for all routes based on dist existence not NODE_ENVimport express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -300,14 +300,19 @@ async function startServer() {
     res.json({ totalClients:tc.count, newClientsThisMonth:nm.count, totalRevenue, totalExpenses:te.total||0, netProfit:totalRevenue-(te.total||0), upcomingAppointments:ua.count, unpaidInvoices:ui.count, unpaidInvoicesTotal:ui.total, revenueByMonth:rbm, expensesByMonth:ebm, revenueByService:rbs, expensesByCategory:ebc, recentClients:rc, nextAppointments:na, topClients:top });
   });
 
-  if (process.env.NODE_ENV !== "production") {
+    const distPath = path.join(process.cwd(), "dist");
+  const hasDist = existsSync(distPath);
+
+  if (!hasDist) {
     const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (_req, res) => { res.sendFile(path.join(distPath, "index.html")); });
+    app.use(express.static(distPath, { index: false }));
+    app.get("*", (_req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
+    });
   }
+
   app.listen(PORT, "0.0.0.0", () => { console.log(`Server running on port ${PORT}`); });
 }
 startServer();
