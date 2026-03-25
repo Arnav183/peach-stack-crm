@@ -3,6 +3,7 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import { existsSync, unlinkSync } from "fs";
+import { execSync } from "child_process";
 import cookieParser from "cookie-parser";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
@@ -12,18 +13,32 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const JWT_SECRET = process.env.JWT_SECRET || "peach-stack-crm-secret-key-2025";
-const PORT = parseInt(process.env.PORT || "8080", 10);
+const PORT = process.env.PORT || 8080;
 const DB_PATH = path.join(process.cwd(), "crm.db");
 
-// Delete corrupt DB if it exists so we start fresh
-if (existsSync(DB_PATH)) {
+// Force reseed if RESET_DB=true, or delete corrupt DB
+if (process.env.RESET_DB === "true" && existsSync(DB_PATH)) {
+  unlinkSync(DB_PATH);
+  console.log("RESET_DB=true — deleted existing DB");
+} else if (existsSync(DB_PATH)) {
   try {
     const testDb = new Database(DB_PATH);
     testDb.prepare("SELECT 1").get();
     testDb.close();
   } catch (e) {
-    console.log("Corrupt DB detected — deleting and starting fresh");
+    console.log("Corrupt DB detected — deleting");
     unlinkSync(DB_PATH);
+  }
+}
+
+// Run seed if DB doesn't exist yet
+if (!existsSync(DB_PATH)) {
+  console.log("No DB found — running seed...");
+  try {
+    execSync("npx tsx seed.ts", { stdio: "inherit", cwd: process.cwd() });
+    console.log("Seed complete.");
+  } catch (e) {
+    console.error("Seed failed:", e);
   }
 }
 
@@ -64,23 +79,6 @@ db.exec(`
   );
 `);
 
-// Auto-seed on first boot
-const userCount = db.prepare("SELECT count(*) as count FROM users").get() as { count: number };
-if (userCount.count === 0) {
-  console.log("Empty DB detected — running seed...");
-  const { execSync } = await import("child_process");
-  try {
-    execSync("npx tsx seed.ts", { stdio: "inherit", cwd: process.cwd() });
-    console.log("Seed complete.");
-  } catch (e) {
-    console.error("Seed failed:", e);
-    // fallback: create just the demo user
-    const hashedPassword = bcrypt.hashSync("admin123", 10);
-    db.prepare("INSERT INTO users (email, password, business_name, owner_name) VALUES (?, ?, ?, ?)")
-      .run("admin@example.com", hashedPassword, "Luxe Threading Studio", "Arnav Hazari");
-  }
-}
-
 async function startServer() {
   const app = express();
 
@@ -97,7 +95,6 @@ async function startServer() {
     });
   };
 
-  // Auth Routes
   app.post("/api/auth/login", (req, res) => {
     const { email, password } = req.body;
     const user = db.prepare("SELECT * FROM users WHERE email = ?").get(email) as any;
@@ -120,7 +117,6 @@ async function startServer() {
     res.json({ user });
   });
 
-  // Client Routes
   app.get("/api/clients", authenticateToken, (req, res) => {
     const clients = db.prepare("SELECT * FROM clients ORDER BY name ASC").all();
     res.json(clients);
@@ -150,7 +146,6 @@ async function startServer() {
     res.json({ message: "Client deleted" });
   });
 
-  // Appointment Routes
   app.get("/api/appointments", authenticateToken, (req, res) => {
     const appointments = db.prepare(`
       SELECT a.*, c.name as client_name FROM appointments a
@@ -171,7 +166,6 @@ async function startServer() {
     res.json({ message: "Status updated" });
   });
 
-  // Stats
   app.get("/api/stats", authenticateToken, (req, res) => {
     const { startDate, endDate } = req.query;
     let dateFilter = "WHERE status = 'Completed'";
@@ -187,7 +181,6 @@ async function startServer() {
     res.json({ totalClients: totalClients.count, totalRevenue: totalRevenue.total || 0, upcomingAppointments: upcomingAppointments.count, revenueByMonth, revenueByService, recentClients, nextAppointments });
   });
 
-  // Serve frontend
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
     app.use(vite.middlewares);
