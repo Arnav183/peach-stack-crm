@@ -48,7 +48,7 @@ export default function App() {
           user && user.role === 'admin' ? (
             <div className="flex min-h-screen bg-slate-50">
               <Sidebar user={user} onLogout={() => setUser(null)} />
-              <main className="flex-1 overflow-y-auto min-w-0">
+              <main className="flex-1 overflow-y-auto min-w-0 pt-14 lg:pt-0">
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/clients" element={<Clients />} />
