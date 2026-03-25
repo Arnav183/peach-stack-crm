@@ -90,7 +90,7 @@ export default function Expenses() {
   const fmt = (n: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-8 bg-slate-50 min-h-screen">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -105,7 +105,7 @@ export default function Expenses() {
             <Upload className="w-4 h-4" /> Import Excel/CSV
             <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImport} />
           </label>
-          <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 text-sm bg-zinc-900 text-white rounded-xl hover:bg-zinc-800 font-medium transition-all">
+          <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 text-sm bg-orange-500 text-white rounded-xl hover:bg-orange-400 font-bold transition-all shadow-lg shadow-orange-500/20">
             <Plus className="w-4 h-4" /> Add Expense
           </button>
         </div>
@@ -206,7 +206,7 @@ export default function Expenses() {
             </div>
             <div className="flex gap-3 mt-6">
               <button onClick={() => setShowForm(false)} className="flex-1 py-2.5 border border-zinc-200 rounded-xl text-sm font-medium hover:bg-zinc-50 transition-all">Cancel</button>
-              <button onClick={handleSave} disabled={!form.date || !form.amount} className="flex-1 py-2.5 bg-zinc-900 text-white rounded-xl text-sm font-semibold hover:bg-zinc-800 transition-all disabled:opacity-40">Save</button>
+              <button onClick={handleSave} disabled={!form.date || !form.amount} className="flex-1 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-bold hover:bg-orange-400 transition-all disabled:opacity-40 shadow-lg shadow-orange-500/20">Save</button>
             </div>
           </div>
         </div>
