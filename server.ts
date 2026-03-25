@@ -1,5 +1,4 @@
-fix: serve SPA index.html for all routes based on dist existence not NODE_ENVimport express from "express";
-import { createServer as createViteServer } from "vite";
+feat: multi-tenant server - 3 roles, business isolation, rate limiting, security hardeningimport { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import { existsSync, unlinkSync } from "fs";
@@ -11,16 +10,40 @@ import Database from "better-sqlite3";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const JWT_SECRET = process.env.JWT_SECRET || "peach-stack-crm-secret-key-2025";
+
+// SECURITY: JWT secret must be set via env var in production — no insecure fallback
+const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === "production"
+  ? (() => { throw new Error("JWT_SECRET env var is required in production"); })()
+  : "dev-only-secret-change-in-prod");
+
 const PORT = process.env.PORT || 8080;
 const DB_PATH = path.join(process.cwd(), "crm.db");
 
+// Rate limiting store (in-memory, per IP)
+const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+function checkRateLimit(ip: string): { allowed: boolean; retryAfter?: number } {
+  const now = Date.now();
+  const entry = loginAttempts.get(ip);
+  if (!entry || now > entry.resetAt) {
+    loginAttempts.set(ip, { count: 1, resetAt: now + 15 * 60 * 1000 });
+    return { allowed: true };
+  }
+  if (entry.count >= 10) {
+    return { allowed: false, retryAfter: Math.ceil((entry.resetAt - now) / 1000) };
+  }
+  entry.count++;
+  return { allowed: true };
+}
+function resetRateLimit(ip: string) { loginAttempts.delete(ip); }
+
 if (process.env.RESET_DB === "true" && existsSync(DB_PATH)) {
-  unlinkSync(DB_PATH); console.log("RESET_DB=true — deleted existing DB");
+  unlinkSync(DB_PATH);
+  console.log("RESET_DB=true — deleted existing DB");
 } else if (existsSync(DB_PATH)) {
   try { const t = new Database(DB_PATH); t.prepare("SELECT 1").get(); t.close(); }
   catch (e) { console.log("Corrupt DB — deleting"); unlinkSync(DB_PATH); }
 }
+
 if (!existsSync(DB_PATH)) {
   console.log("No DB found — running seed...");
   try { execSync("npx tsx seed.ts", { stdio: "inherit", cwd: process.cwd() }); }
@@ -28,58 +51,91 @@ if (!existsSync(DB_PATH)) {
 }
 
 const db = new Database(DB_PATH);
+db.pragma("journal_mode = WAL");
+db.pragma("foreign_keys = ON");
+
 db.exec(`
+  CREATE TABLE IF NOT EXISTS businesses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    industry TEXT NOT NULL DEFAULT 'general',
+    owner_name TEXT,
+    owner_email TEXT,
+    phone TEXT,
+    address TEXT,
+    plan TEXT DEFAULT 'starter',
+    mrr REAL DEFAULT 0,
+    status TEXT DEFAULT 'active',
+    settings TEXT DEFAULT '{}',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_login DATETIME
+  );
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    email TEXT UNIQUE, password TEXT,
-    business_name TEXT, owner_name TEXT,
-    role TEXT DEFAULT 'admin',
-    client_id INTEGER,
-    must_change_password INTEGER DEFAULT 0
+    email TEXT UNIQUE NOT NULL,
+    password TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'business_admin',
+    business_id INTEGER REFERENCES businesses(id) ON DELETE CASCADE,
+    name TEXT,
+    must_change_password INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_login DATETIME
   );
   CREATE TABLE IF NOT EXISTS clients (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT, email TEXT, phone TEXT, notes TEXT,
+    business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    name TEXT NOT NULL, email TEXT, phone TEXT, notes TEXT,
     status TEXT DEFAULT 'New',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
   CREATE TABLE IF NOT EXISTS appointments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    client_id INTEGER, service TEXT, staff TEXT,
-    date DATETIME, duration INTEGER, price REAL,
-    tip REAL DEFAULT 0, is_walkin INTEGER DEFAULT 0,
-    status TEXT, notes TEXT,
-    FOREIGN KEY (client_id) REFERENCES clients(id)
+    business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
+    service TEXT, staff TEXT, date DATETIME, duration INTEGER,
+    price REAL DEFAULT 0, tip REAL DEFAULT 0,
+    is_walkin INTEGER DEFAULT 0, status TEXT DEFAULT 'Confirmed', notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
-  CREATE TABLE IF NOT EXISTS services (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, duration INTEGER, price REAL);
   CREATE TABLE IF NOT EXISTS expenses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
     date TEXT NOT NULL, category TEXT NOT NULL, amount REAL NOT NULL, note TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
   CREATE TABLE IF NOT EXISTS manual_revenue (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
     date TEXT NOT NULL, source TEXT NOT NULL, amount REAL NOT NULL, note TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
   CREATE TABLE IF NOT EXISTS invoices (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    client_id INTEGER, client_name TEXT, client_email TEXT,
+    business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
+    client_name TEXT, client_email TEXT,
     amount REAL NOT NULL, status TEXT DEFAULT 'Unpaid',
-    due_date TEXT, items TEXT, notes TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (client_id) REFERENCES clients(id)
+    due_date TEXT, items TEXT DEFAULT '[]', notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 `);
-
+// Migrations — keep existing data, add new columns safely
 const migrations = [
+  "ALTER TABLE users ADD COLUMN business_id INTEGER REFERENCES businesses(id)",
+  "ALTER TABLE users ADD COLUMN name TEXT",
+  "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'business_admin'",
+  "ALTER TABLE users ADD COLUMN last_login DATETIME",
+  "ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0",
+  "ALTER TABLE clients ADD COLUMN business_id INTEGER",
+  "ALTER TABLE appointments ADD COLUMN business_id INTEGER",
   "ALTER TABLE appointments ADD COLUMN staff TEXT",
   "ALTER TABLE appointments ADD COLUMN tip REAL DEFAULT 0",
   "ALTER TABLE appointments ADD COLUMN is_walkin INTEGER DEFAULT 0",
   "ALTER TABLE appointments ADD COLUMN notes TEXT",
-  "ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'admin'",
-  "ALTER TABLE users ADD COLUMN client_id INTEGER",
-  "ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0",
+  "ALTER TABLE expenses ADD COLUMN business_id INTEGER",
+  "ALTER TABLE manual_revenue ADD COLUMN business_id INTEGER",
+  "ALTER TABLE invoices ADD COLUMN business_id INTEGER",
+  "ALTER TABLE invoices ADD COLUMN client_id INTEGER",
 ];
 for (const m of migrations) { try { db.exec(m); } catch(e) {} }
 
@@ -88,221 +144,375 @@ async function startServer() {
   app.use(express.json({ limit: "10mb" }));
   app.use(cookieParser());
 
+  // Security headers
+  app.use((_req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("X-XSS-Protection", "1; mode=block");
+    next();
+  });
+
+  // --- MIDDLEWARE ---
   const auth = (req: any, res: any, next: any) => {
-    const token = req.cookies.token;
+    const token = req.cookies?.token;
     if (!token) return res.status(401).json({ error: "Unauthorized" });
-    jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
-      if (err) return res.status(403).json({ error: "Forbidden" });
-      req.user = user; next();
-    });
+    try {
+      req.user = jwt.verify(token, JWT_SECRET);
+      next();
+    } catch { res.status(403).json({ error: "Invalid or expired session" }); }
   };
 
-  const adminOnly = (req: any, res: any, next: any) => {
-    if (req.user?.role !== 'admin') return res.status(403).json({ error: "Admin access required" });
+  const superadminOnly = (req: any, res: any, next: any) => {
+    if (req.user?.role !== "superadmin") return res.status(403).json({ error: "Forbidden" });
     next();
   };
 
-  // AUTH
+  const businessOnly = (req: any, res: any, next: any) => {
+    if (!["business_admin", "business_staff"].includes(req.user?.role)) return res.status(403).json({ error: "Forbidden" });
+    if (!req.user?.business_id) return res.status(403).json({ error: "No business context" });
+    next();
+  };
+
+  // Critical: ensure every business query is scoped to req.user.business_id
+  const scopeCheck = (req: any, res: any, next: any) => {
+    if (req.user?.role === "superadmin") return res.status(403).json({ error: "Superadmin cannot access business data directly" });
+    next();
+  };
+
+  // --- AUTH ROUTES ---
+  // Business login — /api/auth/login
   app.post("/api/auth/login", (req, res) => {
+    const ip = req.ip || "unknown";
+    const rl = checkRateLimit(ip);
+    if (!rl.allowed) return res.status(429).json({ error: "Too many attempts. Try again in " + rl.retryAfter + "s" });
     const { email, password } = req.body;
-    const user = db.prepare("SELECT * FROM users WHERE email = ?").get(email) as any;
-    if (user && bcrypt.compareSync(password, user.password)) {
-      const token = jwt.sign({ id: user.id, email: user.email, role: user.role || 'admin', client_id: user.client_id }, JWT_SECRET, { expiresIn: "24h" });
-      res.cookie("token", token, { httpOnly: true, secure: true, sameSite: "none" });
-      res.json({ user: { id: user.id, email: user.email, role: user.role || 'admin', client_id: user.client_id, must_change_password: user.must_change_password, business_name: user.business_name, owner_name: user.owner_name } });
-    } else { res.status(401).json({ error: "Invalid email or password" }); }
+    if (!email || !password) return res.status(400).json({ error: "Email and password required" });
+    const user = db.prepare("SELECT u.*, b.name as business_name, b.industry FROM users u LEFT JOIN businesses b ON u.business_id = b.id WHERE u.email = ? AND u.role != 'superadmin'").get(email.toLowerCase().trim()) as any;
+    if (!user || !bcrypt.compareSync(password, user.password)) return res.status(401).json({ error: "Invalid email or password" });
+    resetRateLimit(ip);
+    db.prepare("UPDATE users SET last_login=datetime('now') WHERE id=?").run(user.id);
+    if (user.business_id) db.prepare("UPDATE businesses SET last_login=datetime('now') WHERE id=?").run(user.business_id);
+    const token = jwt.sign({ id: user.id, email: user.email, role: user.role, business_id: user.business_id, name: user.name }, JWT_SECRET, { expiresIn: "12h" });
+    res.cookie("token", token, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "strict" });
+    res.json({ user: { id: user.id, email: user.email, role: user.role, business_id: user.business_id, name: user.name, business_name: user.business_name, industry: user.industry, must_change_password: user.must_change_password } });
   });
 
-  app.post("/api/auth/logout", (req, res) => { res.clearCookie("token"); res.json({ message: "Logged out" }); });
+  // Superadmin login — /api/admin/login (separate endpoint, separate cookie name conceptually)
+  app.post("/api/admin/login", (req, res) => {
+    const ip = req.ip || "unknown";
+    const rl = checkRateLimit("admin_" + ip);
+    if (!rl.allowed) return res.status(429).json({ error: "Too many attempts" });
+    const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ error: "Required" });
+    const user = db.prepare("SELECT * FROM users WHERE email = ? AND role = 'superadmin'").get(email.toLowerCase().trim()) as any;
+    if (!user || !bcrypt.compareSync(password, user.password)) return res.status(401).json({ error: "Invalid credentials" });
+    resetRateLimit("admin_" + ip);
+    db.prepare("UPDATE users SET last_login=datetime('now') WHERE id=?").run(user.id);
+    const token = jwt.sign({ id: user.id, email: user.email, role: "superadmin" }, JWT_SECRET, { expiresIn: "8h" });
+    res.cookie("token", token, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "strict" });
+    res.json({ user: { id: user.id, email: user.email, role: "superadmin", name: user.name } });
+  });
+
+  app.post("/api/auth/logout", (_req, res) => {
+    res.clearCookie("token"); res.json({ ok: true });
+  });
 
   app.get("/api/auth/me", auth, (req: any, res) => {
-    const user = db.prepare("SELECT id, email, role, client_id, must_change_password, business_name, owner_name FROM users WHERE id = ?").get(req.user.id);
-    res.json({ user });
-  });
-
-  app.put("/api/auth/settings", auth, adminOnly, (req: any, res) => {
-    const { business_name, owner_name, email } = req.body;
-    db.prepare("UPDATE users SET business_name=?, owner_name=?, email=? WHERE id=?").run(business_name, owner_name, email, req.user.id);
-    res.json({ message: "Updated" });
+    const u = db.prepare("SELECT u.id,u.email,u.role,u.business_id,u.name,u.must_change_password,b.name as business_name,b.industry,b.settings FROM users u LEFT JOIN businesses b ON u.business_id=b.id WHERE u.id=?").get(req.user.id) as any;
+    if (!u) return res.status(401).json({ error: "Not found" });
+    res.json({ user: { ...u, settings: u.settings ? JSON.parse(u.settings) : {} } });
   });
 
   app.put("/api/auth/password", auth, (req: any, res) => {
     const { current_password, new_password } = req.body;
-    const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id) as any;
-    if (!bcrypt.compareSync(current_password, user.password)) return res.status(401).json({ error: "Current password is incorrect" });
-    db.prepare("UPDATE users SET password=?, must_change_password=0 WHERE id=?").run(bcrypt.hashSync(new_password, 10), req.user.id);
-    res.json({ message: "Password updated" });
+    if (!new_password || new_password.length < 8) return res.status(400).json({ error: "Password must be at least 8 characters" });
+    const user = db.prepare("SELECT * FROM users WHERE id=?").get(req.user.id) as any;
+    if (!bcrypt.compareSync(current_password, user.password)) return res.status(401).json({ error: "Current password incorrect" });
+    db.prepare("UPDATE users SET password=?, must_change_password=0 WHERE id=?").run(bcrypt.hashSync(new_password, 12), req.user.id);
+    res.json({ ok: true });
+  });
+  // --- SUPERADMIN ROUTES ---
+  app.get("/api/super/businesses", auth, superadminOnly, (_req, res) => {
+    const businesses = db.prepare(`
+      SELECT b.*, 
+        (SELECT COUNT(*) FROM users WHERE business_id=b.id AND role='business_admin') as admin_count,
+        (SELECT COUNT(*) FROM clients WHERE business_id=b.id) as client_count,
+        (SELECT COUNT(*) FROM appointments WHERE business_id=b.id AND date>datetime('now')) as upcoming_appts,
+        (SELECT COALESCE(SUM(price+tip),0) FROM appointments WHERE business_id=b.id AND status='Completed') as total_revenue,
+        (SELECT email FROM users WHERE business_id=b.id AND role='business_admin' LIMIT 1) as admin_email
+      FROM businesses b ORDER BY b.created_at DESC
+    `).all();
+    res.json(businesses);
   });
 
-  // ACCOUNTS
-  app.get("/api/accounts", auth, adminOnly, (_req, res) => {
-    res.json(db.prepare(`SELECT u.id, u.email, u.role, u.client_id, u.must_change_password, u.owner_name, c.name as client_name, c.status as client_status FROM users u LEFT JOIN clients c ON u.client_id = c.id WHERE u.role = 'client' ORDER BY c.name ASC`).all());
+  app.post("/api/super/businesses", auth, superadminOnly, async (req, res) => {
+    const { name, industry, owner_name, owner_email, phone, plan, mrr } = req.body;
+    if (!name || !owner_email || !industry) return res.status(400).json({ error: "name, industry, owner_email required" });
+    if (db.prepare("SELECT id FROM users WHERE email=?").get(owner_email.toLowerCase())) return res.status(409).json({ error: "Email already in use" });
+    const tempPw = Array.from({length:12}, () => "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789!@#"[Math.floor(Math.random()*57)]).join("");
+    const tx = db.transaction(() => {
+      const biz = db.prepare("INSERT INTO businesses (name,industry,owner_name,owner_email,phone,plan,mrr,status) VALUES (?,?,?,?,?,?,?,'active')").run(name, industry, owner_name||"", owner_email.toLowerCase(), phone||"", plan||"starter", mrr||0);
+      db.prepare("INSERT INTO users (email,password,role,business_id,name,must_change_password) VALUES (?,?,'business_admin',?,?,1)").run(owner_email.toLowerCase(), bcrypt.hashSync(tempPw, 12), biz.lastInsertRowid, owner_name||"");
+      return { id: biz.lastInsertRowid, tempPw };
+    });
+    const result = tx();
+    res.json({ id: result.id, tempPassword: result.tempPw, message: "Business created. Share temp password with client." });
   });
 
-  app.post("/api/accounts", auth, adminOnly, (req, res) => {
-    const { client_id, email, password, owner_name } = req.body;
-    if (!client_id || !email || !password) return res.status(400).json({ error: "client_id, email, and password required" });
-    const client = db.prepare("SELECT * FROM clients WHERE id=?").get(client_id) as any;
-    if (!client) return res.status(404).json({ error: "Client not found" });
-    if (db.prepare("SELECT id FROM users WHERE email=?").get(email)) return res.status(409).json({ error: "Email already exists" });
-    const r = db.prepare("INSERT INTO users (email,password,role,client_id,owner_name,must_change_password) VALUES (?,?,'client',?,?,1)").run(email, bcrypt.hashSync(password, 10), client_id, owner_name || client.name);
-    res.json({ id: r.lastInsertRowid });
+  app.put("/api/super/businesses/:id", auth, superadminOnly, (req, res) => {
+    const { name, industry, owner_name, phone, plan, mrr, status } = req.body;
+    db.prepare("UPDATE businesses SET name=?,industry=?,owner_name=?,phone=?,plan=?,mrr=?,status=? WHERE id=?").run(name,industry,owner_name||"",phone||"",plan||"starter",mrr||0,status||"active",req.params.id);
+    res.json({ ok: true });
   });
 
-  app.put("/api/accounts/:id", auth, adminOnly, (req, res) => {
-    const { email, password, owner_name } = req.body;
-    const acc = db.prepare("SELECT * FROM users WHERE id=? AND role='client'").get(req.params.id) as any;
-    if (!acc) return res.status(404).json({ error: "Account not found" });
-    if (password) {
-      db.prepare("UPDATE users SET email=?, password=?, owner_name=?, must_change_password=1 WHERE id=?").run(email || acc.email, bcrypt.hashSync(password, 10), owner_name || acc.owner_name, req.params.id);
-    } else {
-      db.prepare("UPDATE users SET email=?, owner_name=? WHERE id=?").run(email || acc.email, owner_name || acc.owner_name, req.params.id);
+  app.delete("/api/super/businesses/:id", auth, superadminOnly, (req, res) => {
+    // Cascade deletes all business data via FK
+    db.prepare("DELETE FROM businesses WHERE id=?").run(req.params.id);
+    res.json({ ok: true });
+  });
+
+  app.get("/api/super/stats", auth, superadminOnly, (_req, res) => {
+    const totalBiz = (db.prepare("SELECT COUNT(*) as c FROM businesses WHERE status='active'").get() as any).c;
+    const totalMrr = (db.prepare("SELECT COALESCE(SUM(mrr),0) as t FROM businesses WHERE status='active'").get() as any).t;
+    const newThisMonth = (db.prepare("SELECT COUNT(*) as c FROM businesses WHERE created_at>=date('now','start of month')").get() as any).c;
+    const recentLogins = db.prepare("SELECT b.name, b.industry, u.last_login, u.email FROM users u JOIN businesses b ON u.business_id=b.id WHERE u.role='business_admin' AND u.last_login IS NOT NULL ORDER BY u.last_login DESC LIMIT 8").all();
+    const byIndustry = db.prepare("SELECT industry, COUNT(*) as count FROM businesses GROUP BY industry ORDER BY count DESC").all();
+    const mrrByMonth = db.prepare("SELECT strftime('%Y-%m',created_at) as month, COUNT(*) as new_clients, SUM(mrr) as mrr FROM businesses WHERE status='active' GROUP BY month ORDER BY month DESC LIMIT 6").all();
+    res.json({ totalBiz, totalMrr, newThisMonth, recentLogins, byIndustry, mrrByMonth });
+  });
+
+  app.post("/api/super/businesses/:id/reset-password", auth, superadminOnly, (req, res) => {
+    const tempPw = Array.from({length:12}, () => "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789!@#"[Math.floor(Math.random()*57)]).join("");
+    db.prepare("UPDATE users SET password=?,must_change_password=1 WHERE business_id=? AND role='business_admin'").run(bcrypt.hashSync(tempPw, 12), req.params.id);
+    res.json({ tempPassword: tempPw });
+  });
+  // --- BUSINESS ROUTES (all scoped to req.user.business_id) ---
+
+  // Business profile
+  app.get("/api/business/profile", auth, businessOnly, (req: any, res) => {
+    const biz = db.prepare("SELECT * FROM businesses WHERE id=?").get(req.user.business_id) as any;
+    if (!biz) return res.status(404).json({ error: "Not found" });
+    res.json({ ...biz, settings: biz.settings ? JSON.parse(biz.settings) : {} });
+  });
+
+  app.put("/api/business/profile", auth, businessOnly, (req: any, res) => {
+    const { name, owner_name, phone, address, settings } = req.body;
+    db.prepare("UPDATE businesses SET name=?,owner_name=?,phone=?,address=?,settings=? WHERE id=?")
+      .run(name, owner_name||"", phone||"", address||"", JSON.stringify(settings||{}), req.user.business_id);
+    res.json({ ok: true });
+  });
+
+  // Settings / password
+  app.put("/api/business/settings", auth, businessOnly, (req: any, res) => {
+    const { name } = req.body;
+    db.prepare("UPDATE users SET name=? WHERE id=?").run(name, req.user.id);
+    res.json({ ok: true });
+  });
+
+  // Stats — scoped
+  app.get("/api/stats", auth, businessOnly, scopeCheck, (req: any, res) => {
+    const bid = req.user.business_id;
+    const { startDate, endDate } = req.query;
+    let af = "WHERE a.business_id=? AND a.status='Completed'", ap: any[] = [bid];
+    let ef = "WHERE business_id=?", ep: any[] = [bid];
+    let mf = "WHERE business_id=?", mp: any[] = [bid];
+    if (startDate && endDate) {
+      af += " AND a.date BETWEEN ? AND ?"; ap.push(startDate, endDate);
+      ef += " AND date BETWEEN ? AND ?"; ep.push(startDate, endDate);
+      mf += " AND date BETWEEN ? AND ?"; mp.push(startDate, endDate);
     }
-    res.json({ message: "Updated" });
+    const tc = (db.prepare("SELECT count(*) as c FROM clients WHERE business_id=?").get(bid) as any).c;
+    const nm = (db.prepare("SELECT count(*) as c FROM clients WHERE business_id=? AND created_at>=date('now','start of month')").get(bid) as any).c;
+    const ar = (db.prepare(`SELECT COALESCE(sum(a.price+a.tip),0) as t FROM appointments a ${af}`).get(...ap) as any).t;
+    const mr = (db.prepare(`SELECT COALESCE(sum(amount),0) as t FROM manual_revenue ${mf}`).get(...mp) as any).t;
+    const totalRevenue = (ar||0) + (mr||0);
+    const te = (db.prepare(`SELECT COALESCE(sum(amount),0) as t FROM expenses ${ef}`).get(...ep) as any).t;
+    const ua = (db.prepare("SELECT count(*) as c FROM appointments WHERE business_id=? AND date>datetime('now')").get(bid) as any).c;
+    const ui = (db.prepare("SELECT count(*) as c, COALESCE(sum(amount),0) as t FROM invoices WHERE business_id=? AND status='Unpaid'").get(bid) as any);
+    const rbm = db.prepare(`SELECT strftime('%Y-%m',a.date) as month, sum(a.price+a.tip) as total FROM appointments a ${af} GROUP BY month ORDER BY month DESC LIMIT 12`).all(...ap);
+    const ebm = db.prepare(`SELECT strftime('%Y-%m',date) as month, sum(amount) as total FROM expenses ${ef} GROUP BY month ORDER BY month DESC LIMIT 12`).all(...ep);
+    const rbs = db.prepare(`SELECT a.service, sum(a.price) as total, count(*) as count FROM appointments a ${af} GROUP BY a.service ORDER BY total DESC`).all(...ap);
+    const ebc = db.prepare(`SELECT category as name, sum(amount) as value FROM expenses ${ef} GROUP BY category ORDER BY value DESC`).all(...ep);
+    const na = db.prepare("SELECT a.*, COALESCE(c.name,'Walk-in') as client_name FROM appointments a LEFT JOIN clients c ON a.client_id=c.id WHERE a.business_id=? AND a.date>datetime('now') ORDER BY a.date ASC LIMIT 5").all(bid);
+    const top = db.prepare("SELECT c.id,c.name,c.email,c.status, COALESCE(sum(a.price+a.tip),0) as total_revenue, count(a.id) as visit_count FROM clients c LEFT JOIN appointments a ON a.client_id=c.id AND a.status='Completed' WHERE c.business_id=? GROUP BY c.id ORDER BY total_revenue DESC LIMIT 6").all(bid);
+    res.json({ totalClients:tc, newClientsThisMonth:nm, totalRevenue, totalExpenses:te||0, netProfit:totalRevenue-(te||0), upcomingAppointments:ua, unpaidInvoices:ui.c, unpaidInvoicesTotal:ui.t, revenueByMonth:rbm, expensesByMonth:ebm, revenueByService:rbs, expensesByCategory:ebc, nextAppointments:na, topClients:top });
   });
-
-  app.delete("/api/accounts/:id", auth, adminOnly, (req, res) => {
-    db.prepare("DELETE FROM users WHERE id=? AND role='client'").run(req.params.id);
-    res.json({ message: "Revoked" });
-  });
-
-  // CLIENTS
-  app.get("/api/clients", auth, adminOnly, (_req, res) => {
-    const clients = (db.prepare("SELECT * FROM clients ORDER BY name ASC").all() as any[]).map((c: any) => {
-      const pu = db.prepare("SELECT id, email FROM users WHERE client_id=? AND role='client'").get(c.id);
+  // CLIENTS — scoped
+  app.get("/api/clients", auth, businessOnly, scopeCheck, (req: any, res) => {
+    const rows = (db.prepare("SELECT * FROM clients WHERE business_id=? ORDER BY name ASC").all(req.user.business_id) as any[]).map((c: any) => {
+      const pu = db.prepare("SELECT id,email FROM users WHERE business_id=? AND email=? AND role='customer'").get(req.user.business_id, c.email);
       return { ...c, portal_user: pu || null };
     });
-    res.json(clients);
+    res.json(rows);
   });
-  app.post("/api/clients", auth, adminOnly, (req, res) => {
+  app.post("/api/clients", auth, businessOnly, scopeCheck, (req: any, res) => {
     const { name, email, phone, notes, status } = req.body;
-    const r = db.prepare("INSERT INTO clients (name,email,phone,notes,status) VALUES (?,?,?,?,?)").run(name, email, phone, notes||"", status||"New");
+    if (!name) return res.status(400).json({ error: "Name required" });
+    const r = db.prepare("INSERT INTO clients (business_id,name,email,phone,notes,status) VALUES (?,?,?,?,?,?)").run(req.user.business_id, name, email||"", phone||"", notes||"", status||"New");
     res.json({ id: r.lastInsertRowid });
   });
-  app.get("/api/clients/:id", auth, adminOnly, (req, res) => {
-    const client = db.prepare("SELECT * FROM clients WHERE id=?").get(req.params.id);
-    const appointments = db.prepare("SELECT * FROM appointments WHERE client_id=? ORDER BY date DESC").all(req.params.id);
-    const invoices = db.prepare("SELECT * FROM invoices WHERE client_id=? ORDER BY created_at DESC").all(req.params.id);
-    const portal_user = db.prepare("SELECT id, email, must_change_password FROM users WHERE client_id=? AND role='client'").get(req.params.id);
+  app.get("/api/clients/:id", auth, businessOnly, scopeCheck, (req: any, res) => {
+    const client = db.prepare("SELECT * FROM clients WHERE id=? AND business_id=?").get(req.params.id, req.user.business_id);
+    if (!client) return res.status(404).json({ error: "Not found" });
+    const appointments = db.prepare("SELECT * FROM appointments WHERE client_id=? AND business_id=? ORDER BY date DESC").all(req.params.id, req.user.business_id);
+    const invoices = db.prepare("SELECT * FROM invoices WHERE client_id=? AND business_id=? ORDER BY created_at DESC").all(req.params.id, req.user.business_id);
+    const portal_user = db.prepare("SELECT id,email,must_change_password FROM users WHERE business_id=? AND email=(SELECT email FROM clients WHERE id=?) AND role='customer'").get(req.user.business_id, req.params.id);
     res.json({ ...client as any, appointments, invoices, portal_user: portal_user || null });
   });
-  app.put("/api/clients/:id", auth, adminOnly, (req, res) => {
+  app.put("/api/clients/:id", auth, businessOnly, scopeCheck, (req: any, res) => {
+    const existing = db.prepare("SELECT id FROM clients WHERE id=? AND business_id=?").get(req.params.id, req.user.business_id);
+    if (!existing) return res.status(404).json({ error: "Not found" });
     const { name, email, phone, notes, status } = req.body;
-    db.prepare("UPDATE clients SET name=?,email=?,phone=?,notes=?,status=? WHERE id=?").run(name, email, phone, notes, status, req.params.id);
-    res.json({ message: "Updated" });
+    db.prepare("UPDATE clients SET name=?,email=?,phone=?,notes=?,status=? WHERE id=? AND business_id=?").run(name, email||"", phone||"", notes||"", status||"New", req.params.id, req.user.business_id);
+    res.json({ ok: true });
   });
-  app.delete("/api/clients/:id", auth, adminOnly, (req, res) => {
-    db.prepare("DELETE FROM appointments WHERE client_id=?").run(req.params.id);
-    db.prepare("DELETE FROM invoices WHERE client_id=?").run(req.params.id);
-    db.prepare("DELETE FROM users WHERE client_id=? AND role='client'").run(req.params.id);
-    db.prepare("DELETE FROM clients WHERE id=?").run(req.params.id);
-    res.json({ message: "Deleted" });
+  app.delete("/api/clients/:id", auth, businessOnly, scopeCheck, (req: any, res) => {
+    const existing = db.prepare("SELECT id FROM clients WHERE id=? AND business_id=?").get(req.params.id, req.user.business_id);
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    db.prepare("DELETE FROM appointments WHERE client_id=? AND business_id=?").run(req.params.id, req.user.business_id);
+    db.prepare("DELETE FROM invoices WHERE client_id=? AND business_id=?").run(req.params.id, req.user.business_id);
+    db.prepare("DELETE FROM clients WHERE id=? AND business_id=?").run(req.params.id, req.user.business_id);
+    res.json({ ok: true });
   });
-  app.post("/api/clients/import", auth, adminOnly, (req, res) => {
+  // APPOINTMENTS — scoped
+  app.get("/api/appointments", auth, businessOnly, scopeCheck, (req: any, res) => {
+    res.json(db.prepare("SELECT a.*, COALESCE(c.name,'Walk-in') as client_name FROM appointments a LEFT JOIN clients c ON a.client_id=c.id WHERE a.business_id=? ORDER BY a.date DESC").all(req.user.business_id));
+  });
+  app.post("/api/appointments", auth, businessOnly, scopeCheck, (req: any, res) => {
+    const { client_id, service, staff, date, duration, price, tip, is_walkin, status, notes } = req.body;
+    if (client_id) {
+      const owns = db.prepare("SELECT id FROM clients WHERE id=? AND business_id=?").get(client_id, req.user.business_id);
+      if (!owns) return res.status(403).json({ error: "Client not in your business" });
+    }
+    const r = db.prepare("INSERT INTO appointments (business_id,client_id,service,staff,date,duration,price,tip,is_walkin,status,notes) VALUES (?,?,?,?,?,?,?,?,?,?,?)").run(req.user.business_id, client_id||null, service, staff||"", date, duration||60, price||0, tip||0, is_walkin?1:0, status||"Confirmed", notes||"");
+    res.json({ id: r.lastInsertRowid });
+  });
+  app.patch("/api/appointments/:id/status", auth, businessOnly, scopeCheck, (req: any, res) => {
+    const existing = db.prepare("SELECT id FROM appointments WHERE id=? AND business_id=?").get(req.params.id, req.user.business_id);
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    db.prepare("UPDATE appointments SET status=? WHERE id=? AND business_id=?").run(req.body.status, req.params.id, req.user.business_id);
+    res.json({ ok: true });
+  });
+  app.delete("/api/appointments/:id", auth, businessOnly, scopeCheck, (req: any, res) => {
+    db.prepare("DELETE FROM appointments WHERE id=? AND business_id=?").run(req.params.id, req.user.business_id);
+    res.json({ ok: true });
+  });
+
+  // EXPENSES — scoped
+  app.get("/api/expenses", auth, businessOnly, scopeCheck, (req: any, res) => {
+    res.json(db.prepare("SELECT * FROM expenses WHERE business_id=? ORDER BY date DESC").all(req.user.business_id));
+  });
+  app.post("/api/expenses", auth, businessOnly, scopeCheck, (req: any, res) => {
+    const { date, category, amount, note } = req.body;
+    const r = db.prepare("INSERT INTO expenses (business_id,date,category,amount,note) VALUES (?,?,?,?,?)").run(req.user.business_id, date, category, amount, note||"");
+    res.json({ id: r.lastInsertRowid });
+  });
+  app.put("/api/expenses/:id", auth, businessOnly, scopeCheck, (req: any, res) => {
+    const { date, category, amount, note } = req.body;
+    db.prepare("UPDATE expenses SET date=?,category=?,amount=?,note=? WHERE id=? AND business_id=?").run(date, category, amount, note||"", req.params.id, req.user.business_id);
+    res.json({ ok: true });
+  });
+  app.delete("/api/expenses/:id", auth, businessOnly, scopeCheck, (req: any, res) => {
+    db.prepare("DELETE FROM expenses WHERE id=? AND business_id=?").run(req.params.id, req.user.business_id);
+    res.json({ ok: true });
+  });
+  app.post("/api/expenses/import", auth, businessOnly, scopeCheck, (req: any, res) => {
     const { rows } = req.body;
-    if (!Array.isArray(rows)) return res.status(400).json({ error: "rows must be array" });
-    const ins = db.prepare("INSERT INTO clients (name,email,phone,notes,status) VALUES (?,?,?,?,?)");
-    const tx = db.transaction((cls: any[]) => { let n=0; for (const c of cls) { if (!c.name) continue; ins.run(c.name,c.email||"",c.phone||"",c.notes||"",c.status||"New"); n++; } return n; });
+    const ins = db.prepare("INSERT INTO expenses (business_id,date,category,amount,note) VALUES (?,?,?,?,?)");
+    const tx = db.transaction((es: any[]) => { let n=0; for (const e of es) { if (!e.date||!e.amount) continue; ins.run(req.user.business_id,e.date,e.category||"Other",e.amount,e.note||""); n++; } return n; });
     res.json({ imported: tx(rows) });
   });
 
-  // PORTAL
+  // MANUAL REVENUE — scoped
+  app.get("/api/revenue/manual", auth, businessOnly, scopeCheck, (req: any, res) => {
+    res.json(db.prepare("SELECT * FROM manual_revenue WHERE business_id=? ORDER BY date DESC").all(req.user.business_id));
+  });
+  app.post("/api/revenue/manual", auth, businessOnly, scopeCheck, (req: any, res) => {
+    const { date, source, amount, note } = req.body;
+    const r = db.prepare("INSERT INTO manual_revenue (business_id,date,source,amount,note) VALUES (?,?,?,?,?)").run(req.user.business_id, date, source, amount, note||"");
+    res.json({ id: r.lastInsertRowid });
+  });
+  app.put("/api/revenue/manual/:id", auth, businessOnly, scopeCheck, (req: any, res) => {
+    const { date, source, amount, note } = req.body;
+    db.prepare("UPDATE manual_revenue SET date=?,source=?,amount=?,note=? WHERE id=? AND business_id=?").run(date, source, amount, note||"", req.params.id, req.user.business_id);
+    res.json({ ok: true });
+  });
+  app.delete("/api/revenue/manual/:id", auth, businessOnly, scopeCheck, (req: any, res) => {
+    db.prepare("DELETE FROM manual_revenue WHERE id=? AND business_id=?").run(req.params.id, req.user.business_id);
+    res.json({ ok: true });
+  });
+  app.post("/api/revenue/manual/import", auth, businessOnly, scopeCheck, (req: any, res) => {
+    const { rows } = req.body;
+    const ins = db.prepare("INSERT INTO manual_revenue (business_id,date,source,amount,note) VALUES (?,?,?,?,?)");
+    const tx = db.transaction((items: any[]) => { let n=0; for (const r of items) { if (!r.date||!r.amount) continue; ins.run(req.user.business_id,r.date,r.source||"Other",r.amount,r.note||""); n++; } return n; });
+    res.json({ imported: tx(rows) });
+  });
+
+  // INVOICES — scoped
+  app.get("/api/invoices", auth, businessOnly, scopeCheck, (req: any, res) => {
+    res.json(db.prepare("SELECT * FROM invoices WHERE business_id=? ORDER BY created_at DESC").all(req.user.business_id));
+  });
+  app.post("/api/invoices", auth, businessOnly, scopeCheck, (req: any, res) => {
+    const { client_id, client_name, client_email, amount, status, due_date, items, notes } = req.body;
+    const r = db.prepare("INSERT INTO invoices (business_id,client_id,client_name,client_email,amount,status,due_date,items,notes) VALUES (?,?,?,?,?,?,?,?,?)").run(req.user.business_id, client_id||null, client_name||"", client_email||"", amount, status||"Unpaid", due_date||"", JSON.stringify(items||[]), notes||"");
+    res.json({ id: r.lastInsertRowid });
+  });
+  app.put("/api/invoices/:id", auth, businessOnly, scopeCheck, (req: any, res) => {
+    const { client_id, client_name, client_email, amount, status, due_date, items, notes } = req.body;
+    db.prepare("UPDATE invoices SET client_id=?,client_name=?,client_email=?,amount=?,status=?,due_date=?,items=?,notes=? WHERE id=? AND business_id=?").run(client_id||null, client_name||"", client_email||"", amount, status, due_date||"", JSON.stringify(items||[]), notes||"", req.params.id, req.user.business_id);
+    res.json({ ok: true });
+  });
+  app.delete("/api/invoices/:id", auth, businessOnly, scopeCheck, (req: any, res) => {
+    db.prepare("DELETE FROM invoices WHERE id=? AND business_id=?").run(req.params.id, req.user.business_id);
+    res.json({ ok: true });
+  });
+
+  // ACCOUNTS (portal users) — scoped
+  app.get("/api/accounts", auth, businessOnly, scopeCheck, (req: any, res) => {
+    res.json(db.prepare("SELECT u.id,u.email,u.must_change_password,c.name as client_name,c.status as client_status FROM users u LEFT JOIN clients c ON c.email=u.email AND c.business_id=u.business_id WHERE u.business_id=? AND u.role='customer' ORDER BY c.name ASC").all(req.user.business_id));
+  });
+  app.post("/api/accounts", auth, businessOnly, scopeCheck, (req: any, res) => {
+    const { client_id, email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ error: "email and password required" });
+    if (db.prepare("SELECT id FROM users WHERE email=?").get(email)) return res.status(409).json({ error: "Email already exists" });
+    const client = db.prepare("SELECT * FROM clients WHERE id=? AND business_id=?").get(client_id, req.user.business_id) as any;
+    if (!client) return res.status(404).json({ error: "Client not found" });
+    const r = db.prepare("INSERT INTO users (email,password,role,business_id,name,must_change_password) VALUES (?,?,'customer',?,?,1)").run(email, bcrypt.hashSync(password, 12), req.user.business_id, client.name);
+    res.json({ id: r.lastInsertRowid });
+  });
+  app.put("/api/accounts/:id", auth, businessOnly, scopeCheck, (req: any, res) => {
+    const acc = db.prepare("SELECT * FROM users WHERE id=? AND business_id=? AND role='customer'").get(req.params.id, req.user.business_id);
+    if (!acc) return res.status(404).json({ error: "Not found" });
+    if (req.body.password) db.prepare("UPDATE users SET password=?,must_change_password=1 WHERE id=?").run(bcrypt.hashSync(req.body.password, 12), req.params.id);
+    res.json({ ok: true });
+  });
+  app.delete("/api/accounts/:id", auth, businessOnly, scopeCheck, (req: any, res) => {
+    db.prepare("DELETE FROM users WHERE id=? AND business_id=? AND role='customer'").run(req.params.id, req.user.business_id);
+    res.json({ ok: true });
+  });
+
+  // PORTAL (customer-facing)
   app.get("/api/portal/me", auth, (req: any, res) => {
-    if (req.user.role !== 'client') return res.status(403).json({ error: "Client only" });
-    const client = db.prepare("SELECT id,name,email,phone,status,created_at FROM clients WHERE id=?").get(req.user.client_id) as any;
+    if (req.user.role !== "customer") return res.status(403).json({ error: "Customer only" });
+    const client = db.prepare("SELECT id,name,email,phone,status FROM clients WHERE email=? AND business_id=?").get(req.user.email, req.user.business_id) as any;
     if (!client) return res.status(404).json({ error: "Not found" });
-    const appointments = db.prepare("SELECT id,service,staff,date,duration,price,tip,status FROM appointments WHERE client_id=? ORDER BY date DESC").all(req.user.client_id);
-    const invoices = db.prepare("SELECT id,amount,status,due_date,items,notes,created_at FROM invoices WHERE client_id=? ORDER BY created_at DESC").all(req.user.client_id);
-    const stats = db.prepare("SELECT COUNT(*) as total_visits, COALESCE(SUM(price+tip),0) as total_spent, MAX(date) as last_visit FROM appointments WHERE client_id=? AND status='Completed'").get(req.user.client_id) as any;
-    const nextAppt = db.prepare("SELECT id,service,staff,date,duration,price,status FROM appointments WHERE client_id=? AND date>datetime('now') ORDER BY date ASC LIMIT 1").get(req.user.client_id);
-    const owed = (db.prepare("SELECT COALESCE(SUM(amount),0) as total FROM invoices WHERE client_id=? AND status='Unpaid'").get(req.user.client_id) as any).total;
+    const appointments = db.prepare("SELECT * FROM appointments WHERE client_id=? AND business_id=? ORDER BY date DESC").all(client.id, req.user.business_id);
+    const invoices = db.prepare("SELECT * FROM invoices WHERE client_id=? AND business_id=? ORDER BY created_at DESC").all(client.id, req.user.business_id);
+    const stats = db.prepare("SELECT COUNT(*) as total_visits, COALESCE(SUM(price+tip),0) as total_spent, MAX(date) as last_visit FROM appointments WHERE client_id=? AND business_id=? AND status='Completed'").get(client.id, req.user.business_id) as any;
+    const nextAppt = db.prepare("SELECT * FROM appointments WHERE client_id=? AND business_id=? AND date>datetime('now') ORDER BY date ASC LIMIT 1").get(client.id, req.user.business_id);
+    const owed = (db.prepare("SELECT COALESCE(SUM(amount),0) as t FROM invoices WHERE client_id=? AND business_id=? AND status='Unpaid'").get(client.id, req.user.business_id) as any).t;
     res.json({ client, appointments, invoices, stats, nextAppt, outstandingAmount: owed });
   });
   app.put("/api/portal/profile", auth, (req: any, res) => {
-    if (req.user.role !== 'client') return res.status(403).json({ error: "Client only" });
+    if (req.user.role !== "customer") return res.status(403).json({ error: "Customer only" });
     const { name, email, phone } = req.body;
-    db.prepare("UPDATE clients SET name=?,email=?,phone=? WHERE id=?").run(name, email, phone, req.user.client_id);
-    db.prepare("UPDATE users SET email=? WHERE id=?").run(email, req.user.id);
-    res.json({ message: "Updated" });
+    const client = db.prepare("SELECT id FROM clients WHERE email=? AND business_id=?").get(req.user.email, req.user.business_id) as any;
+    if (client) db.prepare("UPDATE clients SET name=?,email=?,phone=? WHERE id=? AND business_id=?").run(name, email, phone, client.id, req.user.business_id);
+    res.json({ ok: true });
   });
-
-  // APPOINTMENTS
-  app.get("/api/appointments", auth, adminOnly, (_req, res) => {
-    res.json(db.prepare("SELECT a.*, COALESCE(c.name,'Walk-in') as client_name FROM appointments a LEFT JOIN clients c ON a.client_id=c.id ORDER BY a.date DESC").all());
-  });
-  app.post("/api/appointments", auth, adminOnly, (req, res) => {
-    const { client_id,service,staff,date,duration,price,tip,is_walkin,status,notes } = req.body;
-    const r = db.prepare("INSERT INTO appointments (client_id,service,staff,date,duration,price,tip,is_walkin,status,notes) VALUES (?,?,?,?,?,?,?,?,?,?)").run(client_id||null,service,staff||"",date,duration||60,price||0,tip||0,is_walkin?1:0,status||"Confirmed",notes||"");
-    res.json({ id: r.lastInsertRowid });
-  });
-  app.put("/api/appointments/:id", auth, adminOnly, (req, res) => {
-    const { client_id,service,staff,date,duration,price,tip,is_walkin,status,notes } = req.body;
-    db.prepare("UPDATE appointments SET client_id=?,service=?,staff=?,date=?,duration=?,price=?,tip=?,is_walkin=?,status=?,notes=? WHERE id=?").run(client_id||null,service,staff||"",date,duration,price,tip||0,is_walkin?1:0,status,notes||"",req.params.id);
-    res.json({ message: "Updated" });
-  });
-  app.patch("/api/appointments/:id/status", auth, adminOnly, (req, res) => {
-    db.prepare("UPDATE appointments SET status=? WHERE id=?").run(req.body.status, req.params.id);
-    res.json({ message: "Updated" });
-  });
-  app.delete("/api/appointments/:id", auth, adminOnly, (req, res) => {
-    db.prepare("DELETE FROM appointments WHERE id=?").run(req.params.id);
-    res.json({ message: "Deleted" });
-  });
-  app.post("/api/appointments/import", auth, adminOnly, (req, res) => {
-    const { rows } = req.body;
-    if (!Array.isArray(rows)) return res.status(400).json({ error: "rows must be array" });
-    const ins = db.prepare("INSERT INTO appointments (client_id,service,staff,date,duration,price,tip,is_walkin,status,notes) VALUES (?,?,?,?,?,?,?,?,?,?)");
-    const tx = db.transaction((appts: any[]) => { let n=0; for (const a of appts) { if (!a.service||!a.date) continue; let cid=null; if (a.client_name) { const cl=db.prepare("SELECT id FROM clients WHERE name=? COLLATE NOCASE").get(a.client_name) as any; if (cl) cid=cl.id; } ins.run(cid,a.service,a.staff||"",a.date,a.duration||60,a.price||0,a.tip||0,a.is_walkin?1:0,a.status||"Completed",a.notes||""); n++; } return n; });
-    res.json({ imported: tx(rows) });
-  });
-
-  // EXPENSES
-  app.get("/api/expenses", auth, adminOnly, (_req, res) => { res.json(db.prepare("SELECT * FROM expenses ORDER BY date DESC").all()); });
-  app.post("/api/expenses", auth, adminOnly, (req, res) => { const { date,category,amount,note }=req.body; const r=db.prepare("INSERT INTO expenses (date,category,amount,note) VALUES (?,?,?,?)").run(date,category,amount,note||""); res.json({ id: r.lastInsertRowid }); });
-  app.put("/api/expenses/:id", auth, adminOnly, (req, res) => { const { date,category,amount,note }=req.body; db.prepare("UPDATE expenses SET date=?,category=?,amount=?,note=? WHERE id=?").run(date,category,amount,note||"",req.params.id); res.json({ message: "Updated" }); });
-  app.delete("/api/expenses/:id", auth, adminOnly, (req, res) => { db.prepare("DELETE FROM expenses WHERE id=?").run(req.params.id); res.json({ message: "Deleted" }); });
-  app.post("/api/expenses/import", auth, adminOnly, (req, res) => { const { rows }=req.body; if (!Array.isArray(rows)) return res.status(400).json({ error: "array required" }); const ins=db.prepare("INSERT INTO expenses (date,category,amount,note) VALUES (?,?,?,?)"); const tx=db.transaction((es: any[]) => { let n=0; for (const e of es) { if (!e.date||!e.amount) continue; ins.run(e.date,e.category||"Other",e.amount,e.note||""); n++; } return n; }); res.json({ imported: tx(rows) }); });
-
-  // MANUAL REVENUE
-  app.get("/api/revenue/manual", auth, adminOnly, (_req, res) => { res.json(db.prepare("SELECT * FROM manual_revenue ORDER BY date DESC").all()); });
-  app.post("/api/revenue/manual", auth, adminOnly, (req, res) => { const { date,source,amount,note }=req.body; const r=db.prepare("INSERT INTO manual_revenue (date,source,amount,note) VALUES (?,?,?,?)").run(date,source,amount,note||""); res.json({ id: r.lastInsertRowid }); });
-  app.put("/api/revenue/manual/:id", auth, adminOnly, (req, res) => { const { date,source,amount,note }=req.body; db.prepare("UPDATE manual_revenue SET date=?,source=?,amount=?,note=? WHERE id=?").run(date,source,amount,note||"",req.params.id); res.json({ message: "Updated" }); });
-  app.delete("/api/revenue/manual/:id", auth, adminOnly, (req, res) => { db.prepare("DELETE FROM manual_revenue WHERE id=?").run(req.params.id); res.json({ message: "Deleted" }); });
-  app.post("/api/revenue/manual/import", auth, adminOnly, (req, res) => { const { rows }=req.body; if (!Array.isArray(rows)) return res.status(400).json({ error: "array required" }); const ins=db.prepare("INSERT INTO manual_revenue (date,source,amount,note) VALUES (?,?,?,?)"); const tx=db.transaction((items: any[]) => { let n=0; for (const r of items) { if (!r.date||!r.amount) continue; ins.run(r.date,r.source||"Other",r.amount,r.note||""); n++; } return n; }); res.json({ imported: tx(rows) }); });
-
-  // INVOICES
-  app.get("/api/invoices", auth, adminOnly, (_req, res) => { res.json(db.prepare("SELECT * FROM invoices ORDER BY created_at DESC").all()); });
-  app.post("/api/invoices", auth, adminOnly, (req, res) => { const { client_id,client_name,client_email,amount,status,due_date,items,notes }=req.body; const r=db.prepare("INSERT INTO invoices (client_id,client_name,client_email,amount,status,due_date,items,notes) VALUES (?,?,?,?,?,?,?,?)").run(client_id||null,client_name||"",client_email||"",amount,status||"Unpaid",due_date||"",JSON.stringify(items||[]),notes||""); res.json({ id: r.lastInsertRowid }); });
-  app.put("/api/invoices/:id", auth, adminOnly, (req, res) => { const { client_id,client_name,client_email,amount,status,due_date,items,notes }=req.body; db.prepare("UPDATE invoices SET client_id=?,client_name=?,client_email=?,amount=?,status=?,due_date=?,items=?,notes=? WHERE id=?").run(client_id||null,client_name||"",client_email||"",amount,status,due_date||"",JSON.stringify(items||[]),notes||"",req.params.id); res.json({ message: "Updated" }); });
-  app.delete("/api/invoices/:id", auth, adminOnly, (req, res) => { db.prepare("DELETE FROM invoices WHERE id=?").run(req.params.id); res.json({ message: "Deleted" }); });
-
-  // STATS
-  app.get("/api/stats", auth, adminOnly, (req, res) => {
-    const { startDate, endDate } = req.query;
-    let af="WHERE a.status='Completed'", ef="WHERE 1=1", mf="WHERE 1=1";
-    let ap: any[]=[], ep: any[]=[], mp: any[]=[];
-    if (startDate&&endDate) { af+=" AND a.date BETWEEN ? AND ?"; ap=[startDate,endDate]; ef+=" AND date BETWEEN ? AND ?"; ep=[startDate,endDate]; mf+=" AND date BETWEEN ? AND ?"; mp=[startDate,endDate]; }
-    const tc=db.prepare("SELECT count(*) as count FROM clients").get() as any;
-    const nm=db.prepare("SELECT count(*) as count FROM clients WHERE created_at>=date('now','start of month')").get() as any;
-    const ar=db.prepare(`SELECT COALESCE(sum(a.price+a.tip),0) as total FROM appointments a ${af}`).get(...ap) as any;
-    const mr=db.prepare(`SELECT COALESCE(sum(amount),0) as total FROM manual_revenue ${mf}`).get(...mp) as any;
-    const totalRevenue=(ar.total||0)+(mr.total||0);
-    const te=db.prepare(`SELECT COALESCE(sum(amount),0) as total FROM expenses ${ef}`).get(...ep) as any;
-    const ua=db.prepare("SELECT count(*) as count FROM appointments WHERE date>datetime('now')").get() as any;
-    const ui=db.prepare("SELECT count(*) as count, COALESCE(sum(amount),0) as total FROM invoices WHERE status='Unpaid'").get() as any;
-    const rbm=db.prepare(`SELECT strftime('%Y-%m',a.date) as month, sum(a.price+a.tip) as total FROM appointments a ${af} GROUP BY month ORDER BY month DESC LIMIT 12`).all(...ap);
-    const ebm=db.prepare(`SELECT strftime('%Y-%m',date) as month, sum(amount) as total FROM expenses ${ef} GROUP BY month ORDER BY month DESC LIMIT 12`).all(...ep);
-    const rbs=db.prepare(`SELECT a.service as service, sum(a.price) as total, count(*) as count FROM appointments a ${af} GROUP BY a.service ORDER BY total DESC`).all(...ap);
-    const ebc=db.prepare(`SELECT category as name, sum(amount) as value FROM expenses ${ef} GROUP BY category ORDER BY value DESC`).all(...ep);
-    const rc=db.prepare("SELECT * FROM clients ORDER BY created_at DESC LIMIT 5").all();
-    const na=db.prepare("SELECT a.*, COALESCE(c.name,'Walk-in') as client_name FROM appointments a LEFT JOIN clients c ON a.client_id=c.id WHERE a.date>datetime('now') ORDER BY a.date ASC LIMIT 5").all();
-    const top=db.prepare("SELECT c.id,c.name,c.email,c.phone,c.status, COALESCE(sum(a.price+a.tip),0) as total_revenue, count(a.id) as visit_count FROM clients c LEFT JOIN appointments a ON a.client_id=c.id AND a.status='Completed' GROUP BY c.id ORDER BY total_revenue DESC LIMIT 6").all();
-    res.json({ totalClients:tc.count, newClientsThisMonth:nm.count, totalRevenue, totalExpenses:te.total||0, netProfit:totalRevenue-(te.total||0), upcomingAppointments:ua.count, unpaidInvoices:ui.count, unpaidInvoicesTotal:ui.total, revenueByMonth:rbm, expensesByMonth:ebm, revenueByService:rbs, expensesByCategory:ebc, recentClients:rc, nextAppointments:na, topClients:top });
-  });
-
-    const distPath = path.join(process.cwd(), "dist");
+  // Static serving
+  const distPath = path.join(process.cwd(), "dist");
   const hasDist = existsSync(distPath);
-
   if (!hasDist) {
     const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
     app.use(vite.middlewares);
@@ -313,6 +523,9 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => { console.log(`Server running on port ${PORT}`); });
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log("Server running on port " + PORT);
+  });
 }
+
 startServer();
