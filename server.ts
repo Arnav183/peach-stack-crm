@@ -64,13 +64,21 @@ db.exec(`
   );
 `);
 
-// Seed demo user
+// Auto-seed on first boot
 const userCount = db.prepare("SELECT count(*) as count FROM users").get() as { count: number };
 if (userCount.count === 0) {
-  const hashedPassword = bcrypt.hashSync("admin123", 10);
-  db.prepare("INSERT INTO users (email, password, business_name, owner_name) VALUES (?, ?, ?, ?)")
-    .run("admin@example.com", hashedPassword, "Luxe Studio", "Arnav Hazari");
-  console.log("Demo user created: admin@example.com / admin123");
+  console.log("Empty DB detected — running seed...");
+  const { execSync } = await import("child_process");
+  try {
+    execSync("npx tsx seed.ts", { stdio: "inherit", cwd: process.cwd() });
+    console.log("Seed complete.");
+  } catch (e) {
+    console.error("Seed failed:", e);
+    // fallback: create just the demo user
+    const hashedPassword = bcrypt.hashSync("admin123", 10);
+    db.prepare("INSERT INTO users (email, password, business_name, owner_name) VALUES (?, ?, ?, ?)")
+      .run("admin@example.com", hashedPassword, "Luxe Threading Studio", "Arnav Hazari");
+  }
 }
 
 async function startServer() {
