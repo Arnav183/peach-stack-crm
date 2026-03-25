@@ -12,7 +12,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const JWT_SECRET = process.env.JWT_SECRET || "peach-stack-crm-secret-key-2025";
-const PORT = process.env.PORT || 3000;
+const PORT = parseInt(process.env.PORT || "8080", 10);
 const DB_PATH = path.join(process.cwd(), "crm.db");
 
 // Delete corrupt DB if it exists so we start fresh
