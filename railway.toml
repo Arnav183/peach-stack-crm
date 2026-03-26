@@ -8,7 +8,7 @@ NPM_CONFIG_PYTHON = "/usr/bin/python3"
 
 [deploy]
 startCommand = "npm run start"
-healthcheckPath = "/"
-healthcheckTimeout = 60
+healthcheckPath = "/health"
+healthcheckTimeout = 120
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
