@@ -66,11 +66,17 @@ db.exec(`
 `);
 
 // ── SUPERADMIN (Peach Stack internal only) ──────────────────────────────────
-const SA_EMAIL = process.env.SUPERADMIN_EMAIL || "admin@peachstack.dev";
-const SA_PASS  = process.env.SUPERADMIN_PASSWORD || "PeachStack2025!";
+// SECURITY: credentials MUST be set via Railway env vars — never hardcoded
+const SA_EMAIL = process.env.SUPERADMIN_EMAIL;
+const SA_PASS  = process.env.SUPERADMIN_PASSWORD;
+if (!SA_EMAIL || !SA_PASS) {
+  console.error("FATAL: SUPERADMIN_EMAIL and SUPERADMIN_PASSWORD must be set as environment variables.");
+  console.error("Set them in Railway dashboard before deploying.");
+  process.exit(1);
+}
 db.prepare("INSERT INTO users (email,password,role,name) VALUES (?,?,'superadmin','Peach Stack Admin')")
   .run(SA_EMAIL, bcrypt.hashSync(SA_PASS, 12));
-console.log("Superadmin: " + SA_EMAIL);
+console.log("Superadmin created: " + SA_EMAIL);
 
 // ── BUSINESS 1: Hair / Beauty Salon ─────────────────────────────────────────
 const b1 = db.prepare("INSERT INTO businesses (name,industry,owner_name,owner_email,phone,plan,mrr,status,created_at) VALUES (?,?,?,?,?,?,?,?,?)")
@@ -293,9 +299,8 @@ insI.run(BID3,b3cids[1],"Corporate: TechFlow Inc","events@techflow.com",864,"Unp
 console.log("Business 3 (Restaurant) seeded");
 
 console.log("\n=== Seed complete ===");
-console.log("Superadmin login:  " + SA_EMAIL + " / " + SA_PASS);
-console.log("Beauty salon:      priya@luxethreading.com / demo1234");
-console.log("Auto shop:         marcus@metroauto.com / demo1234");
-console.log("Restaurant:        amara@peachtreebites.com / demo1234");
-console.log("URL for superadmin: /admin");
+console.log("Superadmin account created for: " + SA_EMAIL);
+console.log("3 demo businesses seeded (Luxe Threading, Metro Auto Works, Peachtree Bites)");
+console.log("Demo business login URL: /login");
+console.log("Superadmin URL: /admin (credentials set via env vars)");
 db.close();
