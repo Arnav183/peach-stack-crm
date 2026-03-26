@@ -1,6 +1,6 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import PeachLogo from "./PeachLogo";
-import { LayoutDashboard, Building2, LogOut, User, Menu, X, DollarSign } from "lucide-react";
+import { LayoutDashboard, Building2, LogOut, User, Menu, X, DollarSign, Sparkles } from "lucide-react";
 import { useState, useEffect } from "react";
 
 interface Props { user: any; onLogout: () => void; }
@@ -32,6 +32,11 @@ function SidebarContent({ user, onLogout, onNav }: { user: any; onLogout: () => 
               (isActive ? "bg-orange-500/15 text-orange-400 border border-orange-500/20" : "text-slate-400 hover:bg-white/5 hover:text-slate-200")
             }>
             <item.icon className="w-4 h-4 shrink-0" />{item.label}
+          </NavLink>
+          <NavLink to="/super/quote"
+            className={({ isActive }) => "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all " + (isActive ? "bg-orange-500/15 text-orange-400 border border-orange-500/20" : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50")}>
+            <Sparkles className="w-4 h-4 shrink-0" />
+            <span>Quote Builder</span>
           </NavLink>
         ))}
       </nav>
