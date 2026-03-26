@@ -12,15 +12,91 @@ const PERIODS = [
   { id: "year", label: "This Year" },
 ];
 
-const REVENUE_SOURCES = ["Cash Sale", "Product Sale", "Gift Card", "Tip (cash)", "Other"];
-
-const MANUAL_TEMPLATE = [
-  { date: "2025-03-01", source: "Cash Sale", amount: 65, note: "Walk-in threading" },
-  { date: "2025-03-05", source: "Product Sale", amount: 28, note: "Brow gel retail" },
-  { date: "2025-03-10", source: "Tip (cash)", amount: 15, note: "Cash tip from Sophia" },
+const REVENUE_SOURCES = [
+  "Service - Cash", "Service - Card", "Service - Online",
+  "Product Sale", "Gift Card Sold", "Gift Card Redeemed",
+  "Tip (cash)", "Tip (card)", "Membership / Package",
+  "Consultation Fee", "Deposit", "Other"
 ];
 
-export default function Revenue() {
+const INDUSTRY_TEMPLATES: Record<string, any[]> = {
+  beauty: [
+    { date: "2026-03-01", source: "Service - Card", amount: 42, note: "Brow threading + tint" },
+    { date: "2026-03-02", source: "Tip (cash)", amount: 8, note: "Cash tip from client" },
+    { date: "2026-03-05", source: "Product Sale", amount: 28, note: "Brow gel retail sale" },
+    { date: "2026-03-08", source: "Gift Card Sold", amount: 50, note: "Gift card sold" },
+    { date: "2026-03-10", source: "Service - Cash", amount: 65, note: "Full face threading (walk-in, cash)" },
+    { date: "2026-03-15", source: "Membership / Package", amount: 120, note: "Monthly threading package" },
+    { date: "2026-03-18", source: "Service - Online", amount: 95, note: "Lash lift - booked online" },
+    { date: "2026-03-20", source: "Gift Card Redeemed", amount: 50, note: "Gift card redeemed" },
+  ],
+  auto: [
+    { date: "2026-03-01", source: "Service - Card", amount: 89, note: "Oil change + filter" },
+    { date: "2026-03-03", source: "Service - Card", amount: 220, note: "Brake pad replacement" },
+    { date: "2026-03-05", source: "Service - Cash", amount: 65, note: "Tire rotation (cash)" },
+    { date: "2026-03-08", source: "Product Sale", amount: 45, note: "Wiper blades + air freshener" },
+    { date: "2026-03-12", source: "Deposit", amount: 100, note: "Deposit on transmission rebuild" },
+    { date: "2026-03-15", source: "Service - Card", amount: 310, note: "Full service + exterior detail" },
+    { date: "2026-03-18", source: "Service - Online", amount: 145, note: "AC diagnostic + recharge (online pay)" },
+    { date: "2026-03-22", source: "Tip (cash)", amount: 20, note: "Cash tip left by customer" },
+  ],
+  restaurant: [
+    { date: "2026-03-01", source: "Service - Card", amount: 145, note: "Dinner reservation (2 pax)" },
+    { date: "2026-03-01", source: "Tip (card)", amount: 30, note: "Card tip - table 12" },
+    { date: "2026-03-05", source: "Service - Cash", amount: 42, note: "Brunch walk-in (cash)" },
+    { date: "2026-03-08", source: "Gift Card Sold", amount: 75, note: "Gift card sale" },
+    { date: "2026-03-12", source: "Deposit", amount: 300, note: "Private event deposit" },
+    { date: "2026-03-15", source: "Service - Online", amount: 320, note: "Corporate lunch booking (online)" },
+    { date: "2026-03-18", source: "Product Sale", amount: 24, note: "Retail wine bottle" },
+    { date: "2026-03-20", source: "Tip (cash)", amount: 45, note: "Cash tips - weekend" },
+  ],
+  medical: [
+    { date: "2026-03-01", source: "Service - Card", amount: 150, note: "Routine checkup" },
+    { date: "2026-03-03", source: "Service - Card", amount: 280, note: "Consultation + procedure" },
+    { date: "2026-03-05", source: "Service - Cash", amount: 80, note: "Follow-up visit (cash)" },
+    { date: "2026-03-10", source: "Consultation Fee", amount: 100, note: "New patient consultation" },
+    { date: "2026-03-12", source: "Product Sale", amount: 35, note: "Aftercare products sold" },
+    { date: "2026-03-15", source: "Deposit", amount: 200, note: "Pre-payment for upcoming procedure" },
+    { date: "2026-03-18", source: "Service - Online", amount: 120, note: "Telehealth consultation" },
+  ],
+  retail: [
+    { date: "2026-03-01", source: "Service - Card", amount: 85, note: "In-store sales (card)" },
+    { date: "2026-03-02", source: "Service - Cash", amount: 42, note: "In-store sales (cash)" },
+    { date: "2026-03-05", source: "Service - Online", amount: 120, note: "Online order - shipped" },
+    { date: "2026-03-08", source: "Gift Card Sold", amount: 50, note: "Gift card sale" },
+    { date: "2026-03-10", source: "Gift Card Redeemed", amount: 50, note: "Gift card redeemed in store" },
+    { date: "2026-03-15", source: "Product Sale", amount: 195, note: "Bulk/wholesale order" },
+  ],
+  fitness: [
+    { date: "2026-03-01", source: "Membership / Package", amount: 120, note: "Monthly membership - new member" },
+    { date: "2026-03-03", source: "Membership / Package", amount: 350, note: "Quarterly membership" },
+    { date: "2026-03-05", source: "Service - Card", amount: 75, note: "Personal training session" },
+    { date: "2026-03-08", source: "Product Sale", amount: 45, note: "Supplements retail" },
+    { date: "2026-03-10", source: "Gift Card Sold", amount: 60, note: "1-month gift membership" },
+    { date: "2026-03-15", source: "Consultation Fee", amount: 50, note: "Initial fitness assessment" },
+    { date: "2026-03-18", source: "Service - Online", amount: 99, note: "Online class subscription" },
+  ],
+  agency: [
+    { date: "2026-03-01", source: "Service - Online", amount: 1500, note: "Website build - milestone 1 of 3" },
+    { date: "2026-03-05", source: "Service - Online", amount: 800, note: "SEO retainer - March" },
+    { date: "2026-03-10", source: "Consultation Fee", amount: 250, note: "Strategy session" },
+    { date: "2026-03-12", source: "Service - Online", amount: 400, note: "Social media management" },
+    { date: "2026-03-15", source: "Deposit", amount: 750, note: "50% deposit - new branding project" },
+    { date: "2026-03-20", source: "Service - Card", amount: 300, note: "Logo + brand guide" },
+  ],
+  general: [
+    { date: "2026-03-01", source: "Service - Card", amount: 150, note: "Job completed - card payment" },
+    { date: "2026-03-03", source: "Service - Cash", amount: 80, note: "Cash payment for job" },
+    { date: "2026-03-05", source: "Tip (cash)", amount: 20, note: "Cash tip from customer" },
+    { date: "2026-03-08", source: "Product Sale", amount: 45, note: "Parts / materials sold" },
+    { date: "2026-03-10", source: "Deposit", amount: 100, note: "Deposit on upcoming job" },
+    { date: "2026-03-15", source: "Service - Online", amount: 200, note: "Online invoice paid" },
+  ],
+};
+
+const MANUAL_TEMPLATE = INDUSTRY_TEMPLATES["general"];
+
+export default function Revenueexport default function Revenue({ user }: { user?: any }) {
   const [stats, setStats] = useState<any>(null);
   const [manualRevenue, setManualRevenue] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -107,10 +183,25 @@ export default function Revenue() {
   };
 
   const downloadTemplate = () => {
-    const ws = XLSX.utils.json_to_sheet(MANUAL_TEMPLATE);
+    const industry = user?.industry || "general";
+    const rows = INDUSTRY_TEMPLATES[industry] || INDUSTRY_TEMPLATES["general"];
+    const ws = XLSX.utils.json_to_sheet(rows);
+    // Style the header row
+    const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
+    ws["!cols"] = [{ wch: 14 }, { wch: 24 }, { wch: 10 }, { wch: 40 }];
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Revenue");
-    XLSX.writeFile(wb, "revenue_template.xlsx");
+    XLSX.utils.book_append_sheet(wb, ws, "Revenue Import");
+    // Add an info sheet
+    const infoRows = [
+      { column: "date", format: "YYYY-MM-DD", example: "2026-03-15", required: "Yes" },
+      { column: "source", format: "Pick from dropdown list in main sheet", example: "Service - Card", required: "Yes" },
+      { column: "amount", format: "Number (no $ sign)", example: "42.50", required: "Yes" },
+      { column: "note", format: "Free text", example: "Brow threading - walk-in", required: "No" },
+    ];
+    const ws2 = XLSX.utils.json_to_sheet(infoRows);
+    ws2["!cols"] = [{ wch: 12 }, { wch: 35 }, { wch: 20 }, { wch: 10 }];
+    XLSX.utils.book_append_sheet(wb, ws2, "Column Guide");
+    XLSX.writeFile(wb, "revenue_import_template.xlsx");
   };
 
   const fmt = (n: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n || 0);
