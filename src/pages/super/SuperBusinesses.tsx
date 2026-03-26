@@ -304,7 +304,7 @@ export default function SuperBusinesses() {
                             className={"text-left p-3 rounded-xl border-2 transition-all " + (sel ? "border-orange-400 bg-orange-50" : d.color + " hover:border-slate-300")}>
                             <div className="flex items-center justify-between mb-1">
                               <span className={"text-xs font-bold px-2 py-0.5 rounded-full " + (sel?"bg-orange-500 text-white":d.badge)}>{d.label}</span>
-                              <span className="text-sm font-bold text-slate-800">{d.price{"}"}<span className="text-xs text-slate-400 font-normal">/mo</span></span>
+                              <span className="text-sm font-bold text-slate-800">{d.price}<span className="text-xs text-slate-400 font-normal">/mo</span></span>
                             </div>
                             <p className="text-xs text-slate-500 leading-snug mb-1.5">{d.desc}</p>
                             <ul className="space-y-0.5">
