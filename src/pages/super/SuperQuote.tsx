@@ -1,255 +1,233 @@
-import { useState } from "react";
-import { Check, Copy, CheckCircle2, ChevronDown, ChevronUp, Sparkles, Download, Mail } from "lucide-react";
+import { useState } from 'react';
+import { Check, FileText, Zap, Globe, LayoutDashboard, Calendar, ShoppingCart, MessageSquare, Bell, BarChart2, Shield, Smartphone } from 'lucide-react';
 
-const SERVICES = [
-  { id:"crm",       cat:"Core",      name:"CRM Dashboard",           desc:"Client management, appointments, revenue, invoices & client portal. Your all-in-one business hub.",      one_time:0,   monthly:25, required:true },
-  { id:"onboard",   cat:"Core",      name:"Onboarding & Data Setup",  desc:"We import your client list, set up your industry settings, and walk you through the platform.",          one_time:49,  monthly:0  },
-  { id:"web_basic", cat:"Website",   name:"Basic Website (5 pages)",  desc:"Home, About, Services, Gallery, Contact. Mobile-ready. Domain + hosting included.",                      one_time:249, monthly:15 },
-  { id:"web_custom",cat:"Website",   name:"Custom Website",           desc:"Fully custom design, booking integration, photo gallery, SEO-ready. Perfect for restaurants & salons.",  one_time:599, monthly:25 },
-  { id:"seo",       cat:"Website",   name:"Local SEO Setup",          desc:"Google Business Profile, keyword setup, local citations. Get found on Google Maps.",                     one_time:79,  monthly:15 },
-  { id:"calendar",  cat:"Bookings",  name:"Online Booking Calendar",  desc:"Clients book 24/7 from your site or a booking link. Auto-syncs with your CRM.",                         one_time:49,  monthly:10 },
-  { id:"reminders", cat:"Bookings",  name:"Appointment Reminders",    desc:"Automated SMS + email reminders before appointments. Cuts no-shows by ~40%.",                           one_time:29,  monthly:10 },
-  { id:"ai_phone",  cat:"AI",        name:"AI Phone Agent",           desc:"Answers calls 24/7, books appointments, handles FAQs. Never misses a lead.",                            one_time:99,  monthly:35 },
-  { id:"ai_chat",   cat:"AI",        name:"AI Website Chat Widget",   desc:"Instant answers on your site, captures leads and books appointments automatically.",                     one_time:49,  monthly:15 },
-  { id:"followup",  cat:"AI",        name:"Auto Follow-up Sequences", desc:"Automatic texts + emails after visits to get reviews, rebook clients, or run promos.",                  one_time:49,  monthly:15 },
-  { id:"reviews",   cat:"Marketing", name:"Review Management",        desc:"Auto-request Google reviews after every visit. Monitor and respond in one place.",                      one_time:29,  monthly:12 },
-  { id:"email_mkt", cat:"Marketing", name:"Email & SMS Marketing",    desc:"Monthly newsletters, promotions, and re-engagement blasts to your client list.",                        one_time:29,  monthly:15 },
-  { id:"social",    cat:"Marketing", name:"Social Media Templates",   desc:"20 branded Canva templates for Instagram + Facebook matched to your brand.",                            one_time:79,  monthly:0  },
-  { id:"support",   cat:"Support",   name:"Priority Support",         desc:"Same-day response, monthly check-in call, proactive monitoring and updates.",                           one_time:0,   monthly:20 },
-];
+// ─── Service Catalog ─────────────────────────────────────────────────────────
+// Each service has a one-time build fee and an optional monthly retainer.
+// The admin checks whatever services apply to the client and gets a live quote.
 
-const CATS = ["Core", "Website", "Bookings", "AI", "Marketing", "Support"];
-
-const BADGE: Record<string,string> = {
-  Core:"bg-orange-50 text-orange-700 border-orange-200",
-  Website:"bg-blue-50 text-blue-700 border-blue-200",
-  Bookings:"bg-emerald-50 text-emerald-700 border-emerald-200",
-  AI:"bg-purple-50 text-purple-700 border-purple-200",
-  Marketing:"bg-amber-50 text-amber-700 border-amber-200",
-  Support:"bg-slate-100 text-slate-600 border-slate-200",
+type Service = {
+  id: string;
+  category: string;
+  name: string;
+  description: string;
+  oneTime: number;
+  monthly: number | null;
+  icon: React.ReactNode;
 };
 
+const SERVICES: Service[] = [
+  // Websites
+  { id: 'website-basic',    category: 'Website',        name: 'Basic Website (5 pages)',       description: 'Home, About, Services, Contact + 1 custom page',          oneTime: 800,   monthly: 79,  icon: <Globe size={16} /> },
+  { id: 'website-full',     category: 'Website',        name: 'Full Website (10+ pages)',       description: 'Custom design, blog, galleries, advanced layout',          oneTime: 1500,  monthly: 99,  icon: <Globe size={16} /> },
+  { id: 'website-ecomm',    category: 'Website',        name: 'E-Commerce Store',               description: 'Product listings, cart, checkout, order management',       oneTime: 2200,  monthly: 149, icon: <ShoppingCart size={16} /> },
+  // CRM / Dashboard
+  { id: 'crm-basic',        category: 'CRM & Dashboard',name: 'Client CRM',                     description: 'Client profiles, notes, status tracking, basic reports',   oneTime: 1200,  monthly: 99,  icon: <LayoutDashboard size={16} /> },
+  { id: 'crm-full',         category: 'CRM & Dashboard',name: 'Full Business Dashboard',        description: 'CRM + revenue, invoices, expenses, analytics',             oneTime: 2000,  monthly: 149, icon: <BarChart2 size={16} /> },
+  // Bookings
+  { id: 'booking',          category: 'Booking System', name: 'Appointment Booking',            description: 'Online scheduling, reminders, calendar sync',              oneTime: 700,   monthly: 59,  icon: <Calendar size={16} /> },
+  { id: 'booking-staff',    category: 'Booking System', name: 'Multi-Staff Booking',            description: 'Staff management, shift scheduling, per-staff calendars',  oneTime: 1100,  monthly: 89,  icon: <Calendar size={16} /> },
+  // Add-ons
+  { id: 'addon-sms',        category: 'Add-ons',        name: 'SMS / Email Notifications',      description: 'Automated reminders, follow-ups, marketing blasts',        oneTime: 300,   monthly: 39,  icon: <Bell size={16} /> },
+  { id: 'addon-chat',       category: 'Add-ons',        name: 'Live Chat Widget',               description: 'Embedded chat with admin notifications',                   oneTime: 250,   monthly: 29,  icon: <MessageSquare size={16} /> },
+  { id: 'addon-mobile',     category: 'Add-ons',        name: 'Mobile App (PWA)',               description: 'Installable progressive web app from existing site',       oneTime: 800,   monthly: 49,  icon: <Smartphone size={16} /> },
+  { id: 'addon-security',   category: 'Add-ons',        name: 'Security & Compliance Package',  description: 'SSL, backups, uptime monitoring, monthly security report',  oneTime: 200,   monthly: 49,  icon: <Shield size={16} /> },
+];
+
+// ─── Preset Bundles ───────────────────────────────────────────────────────────
+const BUNDLES = [
+  {
+    name: 'Starter',
+    tagline: 'Perfect for brand-new small businesses',
+    color: 'bg-slate-100 border-slate-200',
+    accent: 'text-slate-700',
+    ids: ['website-basic', 'addon-security'],
+  },
+  {
+    name: 'Business',
+    tagline: 'Most popular — website + CRM + booking',
+    color: 'bg-orange-50 border-orange-200',
+    accent: 'text-orange-600',
+    ids: ['website-full', 'crm-basic', 'booking', 'addon-sms'],
+  },
+  {
+    name: 'Full Stack',
+    tagline: 'Everything — max automation & analytics',
+    color: 'bg-peach-50 border-orange-300',
+    accent: 'text-orange-700',
+    ids: ['website-full', 'crm-full', 'booking-staff', 'addon-sms', 'addon-chat', 'addon-mobile', 'addon-security'],
+  },
+];
+
+const categories = [...new Set(SERVICES.map(s => s.category))];
+
+function fmt(n: number) {
+  return n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+}
+
 export default function SuperQuote() {
-  const [sel, setSel] = useState<Set<string>>(new Set(["crm"]));
-  const [clientBiz, setClientBiz] = useState("");
-  const [clientName, setClientName] = useState("");
-  const [clientEmail, setClientEmail] = useState("");
-  const [note, setNote] = useState("");
-  const [discount, setDiscount] = useState(0);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const [copied, setCopied] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [clientName, setClientName] = useState('');
+  const [notes, setNotes] = useState('');
 
-  const toggle = (id: string, required?: boolean) => {
-    if (required) return;
-    setSel(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  };
-
-  const chosen = SERVICES.filter(s => sel.has(s.id) || s.required);
-  const oneTime = chosen.reduce((a, s) => a + s.one_time, 0);
-  const monthly = chosen.reduce((a, s) => a + s.monthly, 0);
-  const oneTimeDisc = Math.round(oneTime * (1 - discount / 100));
-  const year1 = oneTimeDisc + monthly * 12;
-
-  const buildText = () => {
-    const rows: string[] = ["PEACH STACK — SERVICE QUOTE", "================================"];
-    if (clientBiz) rows.push("Client: " + clientBiz + (clientName ? " (" + clientName + ")" : ""));
-    rows.push("Date: " + new Date().toLocaleDateString("en-US", { month:"long", day:"numeric", year:"numeric" }));
-    rows.push("", "SERVICES INCLUDED:", "--------------------------------");
-    chosen.forEach(s => {
-      rows.push("  " + s.name);
-      if (s.one_time > 0) rows.push("    One-time: $" + String(s.one_time));
-      if (s.monthly > 0) rows.push("    Monthly: $" + String(s.monthly) + "/mo");
-      if (s.one_time === 0 && s.monthly === 0) rows.push("    Included free");
+  const toggle = (id: string) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
     });
-    rows.push("", "--------------------------------");
-    if (discount > 0) rows.push("One-time: $" + String(oneTime) + "  ->  $" + String(oneTimeDisc) + " (" + String(discount) + "% off)");
-    else rows.push("One-time: $" + String(oneTime));
-    rows.push("Monthly: $" + String(monthly) + "/mo");
-    rows.push("Year 1 total: $" + year1.toLocaleString());
-    if (note) rows.push("", "Note: " + note);
-    rows.push("", "Questions? peachstack.dev", "================================");
-    return rows.join("\n");
   };
 
-  const copyQuote = async () => {
-    await navigator.clipboard.writeText(buildText());
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
-  };
+  const applyBundle = (ids: string[]) => setSelected(new Set(ids));
 
-  const exportExcel = () => {
-    // Build a nicely formatted CSV that Excel renders cleanly
-    const biz = clientBiz || "Client";
-    const lines: string[] = [];
-    const q = (v: string) => '"' + v.replace(/"/g, '""') + '"';
+  const selectedServices = SERVICES.filter(s => selected.has(s.id));
+  const totalOneTime = selectedServices.reduce((sum, s) => sum + s.oneTime, 0);
+  const totalMonthly = selectedServices.reduce((sum, s) => sum + (s.monthly ?? 0), 0);
 
-    lines.push(q("PEACH STACK") + "," + q("SERVICE QUOTE") + ",,,");
-    lines.push(",,,,,");
-    lines.push(q("Client") + "," + q(clientBiz || "-") + ",,,");
-    lines.push(q("Contact") + "," + q(clientName || "-") + ",,,");
-    lines.push(q("Email") + "," + q(clientEmail || "-") + ",,,");
-    lines.push(q("Date") + "," + q(new Date().toLocaleDateString("en-US", {month:"long",day:"numeric",year:"numeric"})) + ",,,");
-    lines.push(",,,,,");
-    lines.push(q("SERVICE") + "," + q("DESCRIPTION") + "," + q("ONE-TIME ($)") + "," + q("MONTHLY ($/mo)") + ",");
-    lines.push(q("--------") + "," + q("--------") + "," + q("--------") + "," + q("--------") + ",");
-    chosen.forEach(s => {
-      lines.push(q(s.name) + "," + q(s.desc) + "," + q(s.one_time > 0 ? "$" + String(s.one_time) : "Included") + "," + q(s.monthly > 0 ? "$" + String(s.monthly) + "/mo" : "-") + ",");
-    });
-    lines.push(",,,,,");
-    lines.push(q("--------") + ",,," + q("--------") + ",");
-    if (discount > 0) {
-      lines.push(q("One-time (before discount)") + ",,," + q("$" + String(oneTime)) + ",");
-      lines.push(q("Startup Discount (" + String(discount) + "%)") + ",,," + q("-$" + String(oneTime - oneTimeDisc)) + ",");
-    }
-    lines.push(q("ONE-TIME TOTAL") + ",,," + q("$" + String(oneTimeDisc)) + ",");
-    lines.push(q("MONTHLY RETAINER") + ",,," + q("$" + String(monthly) + "/mo") + ",");
-    lines.push(q("YEAR 1 INVESTMENT") + ",,," + q("$" + year1.toLocaleString()) + ",");
-    if (note) { lines.push(",,,,,"); lines.push(q("Note") + "," + q(note) + ",,,"); }
-    lines.push(",,,,,");
-    lines.push(q("Ready to get started? Contact us at peachstack.dev") + ",,,,");
-
-    const csv = lines.join("\n");
-    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = biz.replace(/\s+/g,"-").toLowerCase() + "-peachstack-quote.csv";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const emailQuote = () => {
-    const subject = encodeURIComponent("Your Custom Quote — Peach Stack" + (clientBiz ? " for " + clientBiz : ""));
-    const body = encodeURIComponent(buildText());
-    window.open("mailto:" + encodeURIComponent(clientEmail || "") + "?subject=" + subject + "&body=" + body);
+  const handleCopy = () => {
+    const lines = [
+      clientName ? 'Quote for: ' + clientName : 'Peach Stack — Project Quote',
+      '',
+      'ONE-TIME BUILD FEES',
+      ...selectedServices.map(s => '  ' + s.name.padEnd(40) + fmt(s.oneTime)),
+      '',
+      'MONTHLY RETAINER (per service)',
+      ...selectedServices.filter(s => s.monthly).map(s => '  ' + s.name.padEnd(40) + fmt(s.monthly!) + '/mo'),
+      '',
+      'TOTAL ONE-TIME:  ' + fmt(totalOneTime),
+      'TOTAL MONTHLY:   ' + fmt(totalMonthly) + '/mo',
+      '',
+      notes ? 'Notes: ' + notes : '',
+    ].filter(l => l !== undefined);
+    navigator.clipboard.writeText(lines.join('\n'));
+    alert('Quote copied to clipboard!');
   };
 
   return (
-    <div className="p-6 bg-slate-50 min-h-screen">
-      <div className="max-w-5xl mx-auto">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <Sparkles className="w-6 h-6 text-orange-500" />
-            Quote Builder
-          </h1>
-          <p className="text-slate-500 text-sm mt-1">Pick services, set a discount, then copy, export to Excel, or email directly to the client.</p>
+    <div className="p-8 bg-slate-50 min-h-screen">
+      <div className="max-w-5xl mx-auto space-y-8">
+
+        {/* Header */}
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Quote Builder</h1>
+          <p className="text-slate-500 text-sm mt-1">Select services to build a client proposal. Prices are one-time build + optional monthly retainer per service.</p>
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-3">
-            {CATS.map(cat => {
-              const catSvcs = SERVICES.filter(s => s.cat === cat);
-              const isOpen = !collapsed.has(cat);
-              const selCount = catSvcs.filter(s => sel.has(s.id) || s.required).length;
-              return (
-                <div key={cat} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                  <button onClick={() => setCollapsed(c => { const n = new Set(c); n.has(cat) ? n.delete(cat) : n.add(cat); return n; })}
-                    className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-slate-50 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <span className="font-bold text-slate-800 text-sm">{cat}</span>
-                      {selCount > 0 && <span className={"text-xs font-bold px-2 py-0.5 rounded-full border " + BADGE[cat]}>{selCount} selected</span>}
-                    </div>
-                    {isOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-                  </button>
-                  {isOpen && (
-                    <div className="divide-y divide-slate-50">
-                      {catSvcs.map(svc => {
-                        const isSelected = sel.has(svc.id) || svc.required;
-                        return (
-                          <div key={svc.id} onClick={() => toggle(svc.id, svc.required)}
-                            className={"flex items-start gap-4 px-5 py-3.5 transition-colors " + (svc.required ? "opacity-70" : "cursor-pointer hover:bg-slate-50") + (isSelected && !svc.required ? " bg-orange-50/40" : "")}>
-                            <div className={"w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 mt-0.5 " + (isSelected ? "bg-orange-500 border-orange-500" : "border-slate-300")}>
-                              {isSelected && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <p className="text-sm font-semibold text-slate-800">{svc.name}</p>
-                                {svc.required && <span className="text-xs bg-orange-100 text-orange-600 font-bold px-1.5 py-0.5 rounded">Required</span>}
-                              </div>
-                              <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{svc.desc}</p>
-                            </div>
-                            <div className="text-right shrink-0 text-xs">
-                              {svc.one_time > 0 && <p className="font-bold text-slate-700">{"$"}{svc.one_time} <span className="font-normal text-slate-400">setup</span></p>}
-                              {svc.monthly > 0 && <p className="font-bold text-slate-700">{"$"}{svc.monthly}<span className="font-normal text-slate-400">/mo</span></p>}
-                              {svc.one_time === 0 && svc.monthly === 0 && <p className="text-slate-400">Free</p>}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+
+        {/* Client Name */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-6">
+          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Client Name (optional)</label>
+          <input
+            value={clientName}
+            onChange={e => setClientName(e.target.value)}
+            placeholder="e.g. Luxe Threading Studio"
+            className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
+          />
+        </div>
+
+        {/* Preset Bundles */}
+        <div>
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Preset Bundles — click to auto-select</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {BUNDLES.map(b => (
+              <button
+                key={b.name}
+                onClick={() => applyBundle(b.ids)}
+                className={"text-left p-5 rounded-2xl border-2 transition-all hover:scale-[1.02] " + b.color}
+              >
+                <div className={"font-bold text-base " + b.accent}>{b.name}</div>
+                <div className="text-xs text-slate-500 mt-1">{b.tagline}</div>
+                <div className="text-xs text-slate-400 mt-2">{b.ids.length} services included</div>
+              </button>
+            ))}
           </div>
-          <div className="space-y-4">
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-3">
-              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Client Info</h3>
-              <input type="text" placeholder="Business name" value={clientBiz} onChange={e => setClientBiz(e.target.value)}
-                className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-400" />
-              <input type="text" placeholder="Contact name" value={clientName} onChange={e => setClientName(e.target.value)}
-                className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-400" />
-              <input type="email" placeholder="Client email" value={clientEmail} onChange={e => setClientEmail(e.target.value)}
-                className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-400" />
-              <textarea placeholder="Note for client..." value={note} onChange={e => setNote(e.target.value)} rows={2}
-                className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none" />
-            </div>
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-4">
-              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Summary</h3>
-              <div className="space-y-1.5">
-                {chosen.map(s => (
-                  <div key={s.id} className="flex justify-between text-xs">
-                    <span className="text-slate-600 truncate pr-2">{s.name}</span>
-                    <span className="text-slate-500 shrink-0">
-                      {s.one_time > 0 && <span className="font-medium">{"$"}{s.one_time}</span>}
-                      {s.one_time > 0 && s.monthly > 0 && <span className="text-slate-300 mx-0.5">+</span>}
-                      {s.monthly > 0 && <span>{"$"}{s.monthly}/mo</span>}
-                      {s.one_time === 0 && s.monthly === 0 && <span className="text-slate-400">Free</span>}
-                    </span>
-                  </div>
-                ))}
+        </div>
+
+        {/* Service Checklist */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6">
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Or build manually — check each service</p>
+          {categories.map(cat => (
+            <div key={cat}>
+              <h3 className="text-sm font-bold text-slate-700 mb-3 pb-2 border-b border-slate-100">{cat}</h3>
+              <div className="space-y-2">
+                {SERVICES.filter(s => s.category === cat).map(svc => {
+                  const on = selected.has(svc.id);
+                  return (
+                    <label
+                      key={svc.id}
+                      className={"flex items-start gap-3 p-3 rounded-xl cursor-pointer transition-colors " + (on ? 'bg-orange-50 border border-orange-200' : 'hover:bg-slate-50 border border-transparent')}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={on}
+                        onChange={() => toggle(svc.id)}
+                        className="mt-0.5 accent-orange-500"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-orange-500">{svc.icon}</span>
+                          <span className="font-semibold text-sm text-slate-800">{svc.name}</span>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-0.5">{svc.description}</p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="text-sm font-bold text-slate-800">{fmt(svc.oneTime)}</div>
+                        {svc.monthly && <div className="text-xs text-slate-400">+ {fmt(svc.monthly)}/mo</div>}
+                      </div>
+                    </label>
+                  );
+                })}
               </div>
-              {chosen.length > 0 && <div className="h-px bg-slate-100" />}
-              <div>
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Startup Discount</p>
-                <div className="flex gap-1.5 flex-wrap">
-                  {[0,10,15,20,25].map(d => (
-                    <button key={d} onClick={() => setDiscount(d)}
-                      className={"px-2.5 py-1 rounded-lg text-xs font-bold border transition-all " + (discount===d ? "bg-orange-500 text-white border-orange-500" : "border-slate-200 text-slate-500 hover:border-slate-400")}>
-                      {d===0 ? "None" : String(d)+"% off"}
-                    </button>
+            </div>
+          ))}
+        </div>
+
+        {/* Notes */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-6">
+          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Notes / Custom Items</label>
+          <textarea
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            placeholder="e.g. Rush delivery +$200, custom integrations, domain not included..."
+            rows={3}
+            className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 resize-none"
+          />
+        </div>
+
+        {/* Quote Summary */}
+        <div className="bg-white rounded-2xl border-2 border-orange-200 p-6 sticky bottom-6 shadow-xl shadow-orange-100">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Quote Summary</p>
+              {selectedServices.length === 0 ? (
+                <p className="text-slate-400 text-sm">No services selected yet</p>
+              ) : (
+                <div className="space-y-0.5">
+                  {selectedServices.map(s => (
+                    <div key={s.id} className="flex items-center gap-2 text-sm text-slate-600">
+                      <Check size={13} className="text-orange-500 shrink-0" />
+                      <span>{s.name}</span>
+                      <span className="text-slate-400">— {fmt(s.oneTime)}{s.monthly ? ' + ' + fmt(s.monthly) + '/mo' : ''}</span>
+                    </div>
                   ))}
                 </div>
-              </div>
-              <div className="bg-slate-50 rounded-xl p-4 space-y-2 border border-slate-200">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-slate-600">One-time fee</span>
-                  <div className="text-right">
-                    {discount > 0 && <p className="text-xs text-slate-400 line-through">{"$"}{oneTime}</p>}
-                    <p className="text-base font-bold text-slate-900">{"$"}{oneTimeDisc}</p>
-                  </div>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-slate-600">Monthly retainer</span>
-                  <p className="text-base font-bold text-orange-500">{"$"}{monthly}<span className="text-xs font-normal text-slate-400">/mo</span></p>
-                </div>
-                <div className="h-px bg-slate-200" />
-                <p className="text-xs text-slate-400">Year 1: <span className="font-semibold text-slate-600">{"$"}{year1.toLocaleString()}</span></p>
-              </div>
-              <button onClick={copyQuote}
-                className="w-full flex items-center justify-center gap-2 py-2.5 bg-orange-500 text-white rounded-xl font-bold text-sm hover:bg-orange-400 transition-all shadow-lg shadow-orange-500/20">
-                {copied ? <><CheckCircle2 className="w-4 h-4" />Copied!</> : <><Copy className="w-4 h-4" />Copy Quote</>}
-              </button>
-              <button onClick={exportExcel}
-                className="w-full flex items-center justify-center gap-2 py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-sm hover:bg-emerald-500 transition-all">
-                <Download className="w-4 h-4" />Export to Excel
-              </button>
-              <button onClick={emailQuote}
-                className="w-full flex items-center justify-center gap-2 py-2.5 bg-slate-800 text-white rounded-xl font-bold text-sm hover:bg-slate-700 transition-all">
-                <Mail className="w-4 h-4" />Email to Client
+              )}
+            </div>
+            <div className="text-right shrink-0">
+              <div className="text-3xl font-black text-slate-900">{fmt(totalOneTime)}</div>
+              <div className="text-sm text-slate-500">one-time build</div>
+              {totalMonthly > 0 && (
+                <div className="text-lg font-bold text-orange-600 mt-1">+ {fmt(totalMonthly)}/mo retainer</div>
+              )}
+              <button
+                onClick={handleCopy}
+                disabled={selectedServices.length === 0}
+                className="mt-3 flex items-center gap-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-40 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-colors"
+              >
+                <FileText size={15} /> Copy Quote
               </button>
             </div>
           </div>
         </div>
+
       </div>
     </div>
   );
