@@ -3,44 +3,23 @@ import { Plus, Search, MoreHorizontal, RefreshCw, Trash2, X, Eye, EyeOff, Copy, 
 import { format, parseISO } from "date-fns";
 
 const INDUSTRIES = ["beauty","auto","restaurant","medical","retail","fitness","agency","general"];
-const PLAN_DETAILS: Record<string,{label:string;price:number;desc:string;features:string[];color:string;badge:string}> = {
-  starter: {
-    label: "Starter", price: 49,
-    desc: "Perfect for solo operators just getting started.",
-    features: ["Up to 50 clients","Appointments & history","Basic revenue tracking","Client portal access","Email support"],
-    color: "border-slate-200 bg-slate-50", badge: "bg-slate-100 text-slate-600"
-  },
-  pro: {
-    label: "Pro", price: 149,
-    desc: "Most popular — full platform for growing businesses.",
-    features: ["Up to 250 clients","Appointments + staff tracking","Revenue & expense P&L","Excel import/export","Invoice generation","Client portal + login","Priority support"],
-    color: "border-blue-200 bg-blue-50", badge: "bg-blue-50 text-blue-700"
-  },
-  growth: {
-    label: "Growth", price: 299,
-    desc: "For established businesses ready to scale.",
-    features: ["Up to 1,000 clients","Everything in Pro","Advanced analytics & charts","Multi-staff management","Tips & gratuity tracking","Custom Excel templates","Dedicated onboarding"],
-    color: "border-emerald-200 bg-emerald-50", badge: "bg-emerald-50 text-emerald-700"
-  },
-  enterprise: {
-    label: "Enterprise", price: 499,
-    desc: "High-volume operations with custom needs.",
-    features: ["Unlimited clients","Everything in Growth","White-label option","Custom industry setup","Priority phone support","Quarterly business reviews","SLA guarantee"],
-    color: "border-purple-200 bg-purple-50", badge: "bg-purple-50 text-purple-700"
-  },
-};
-const PLANS = Object.keys(PLAN_DETAILS);
-const PLAN_MRR: Record<string,number> = Object.fromEntries(Object.entries(PLAN_DETAILS).map(([k,v])=>[k,v.price]));
+const SERVICE_TAGS = [
+  { id:"crm",      label:"CRM Dashboard",   mrr:25 },
+  { id:"website",  label:"Website",          mrr:15 },
+  { id:"booking",  label:"Bookings",         mrr:10 },
+  { id:"ai_phone", label:"AI Phone Agent",   mrr:35 },
+  { id:"reviews",  label:"Review Mgmt",      mrr:12 },
+  { id:"seo",      label:"Local SEO",        mrr:15 },
+  { id:"email",    label:"Email/SMS Mkt",    mrr:15 },
+  { id:"ai_chat",  label:"AI Chat Widget",   mrr:15 },
+  { id:"support",  label:"Priority Support", mrr:20 },
+];
 
 const INDUSTRY_COLORS: Record<string,string> = {
   beauty:"bg-orange-100 text-orange-700", auto:"bg-blue-100 text-blue-700",
   restaurant:"bg-emerald-100 text-emerald-700", medical:"bg-purple-100 text-purple-700",
   retail:"bg-amber-100 text-amber-700", fitness:"bg-red-100 text-red-700",
   agency:"bg-cyan-100 text-cyan-700", general:"bg-slate-100 text-slate-600",
-};
-const PLAN_BADGE: Record<string,string> = {
-  starter:"bg-slate-100 text-slate-600", pro:"bg-blue-50 text-blue-700",
-  growth:"bg-emerald-50 text-emerald-700", enterprise:"bg-purple-50 text-purple-700",
 };
 const STATUS_COLORS: Record<string,string> = {
   active:"bg-emerald-50 text-emerald-700 border-emerald-100",
@@ -67,13 +46,20 @@ export default function SuperBusinesses() {
   const [copiedPw, setCopiedPw] = useState(false);
   const [copiedReset, setCopiedReset] = useState(false);
 
-  const [form, setForm] = useState({ name:"", industry:"beauty", owner_name:"", owner_email:"", phone:"", plan:"pro", mrr:"" });
+  const emptyForm = { name:"", industry:"beauty", owner_name:"", owner_email:"", phone:"", mrr:"" };
+  const [form, setForm] = useState(emptyForm);
+  const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
 
   const load = () => fetch("/api/super/businesses").then(r=>r.json()).then(setBusinesses).finally(()=>setLoading(false));
   useEffect(()=>{load();},[]);
 
-  // Auto-set MRR when plan changes
-  const handlePlanChange = (plan: string) => setForm(f => ({ ...f, plan, mrr: String(PLAN_MRR[plan] || "") }));
+  const toggleTag = (tag: typeof SERVICE_TAGS[0]) => {
+    const next = new Set(activeTags);
+    if (next.has(tag.id)) next.delete(tag.id); else next.add(tag.id);
+    setActiveTags(next);
+    const total = SERVICE_TAGS.filter(t => next.has(t.id)).reduce((s,t) => s + t.mrr, 0);
+    setForm(f => ({ ...f, mrr: total > 0 ? String(total) : "" }));
+  };
 
   const filtered = businesses.filter(b => {
     const matchSearch = !search || b.name.toLowerCase().includes(search.toLowerCase()) || b.owner_email?.toLowerCase().includes(search.toLowerCase());
@@ -86,7 +72,7 @@ export default function SuperBusinesses() {
     e.preventDefault(); setSaving(true); setCreateMsg(null);
     const res = await fetch("/api/super/businesses", {
       method: "POST", headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({ ...form, mrr: parseFloat(form.mrr)||0 })
+      body: JSON.stringify({ ...form, plan:"custom", mrr: parseFloat(form.mrr)||0 })
     });
     const d = await res.json();
     if (res.ok) {
@@ -135,7 +121,7 @@ export default function SuperBusinesses() {
           <h1 className="text-2xl font-bold text-slate-900">Client Businesses</h1>
           <p className="text-slate-500 text-sm mt-0.5">{businesses.filter(b=>b.status==='active').length} active · {fmt(totalMrr)}/mo filtered MRR</p>
         </div>
-        <button onClick={()=>{setShowCreate(true);setCreateMsg(null);setForm({name:"",industry:"beauty",owner_name:"",owner_email:"",phone:"",plan:"pro",mrr:String(PLAN_MRR.pro)});}}
+        <button onClick={()=>{setShowCreate(true);setCreateMsg(null);setForm(emptyForm);setActiveTags(new Set());}}
           className="flex items-center gap-2 px-4 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-bold hover:bg-orange-400 shadow-lg shadow-orange-500/20">
           <Plus className="w-4 h-4" />Add Business
         </button>
@@ -176,7 +162,7 @@ export default function SuperBusinesses() {
               <thead><tr className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wider border-b border-slate-100">
                 <th className="px-6 py-4 font-semibold">Business</th>
                 <th className="px-6 py-4 font-semibold">Industry</th>
-                <th className="px-6 py-4 font-semibold">Plan / MRR</th>
+                <th className="px-6 py-4 font-semibold">Monthly Retainer</th>
                 <th className="px-6 py-4 font-semibold">Metrics</th>
                 <th className="px-6 py-4 font-semibold">Status</th>
                 <th className="px-6 py-4 font-semibold">Last Login</th>
@@ -193,8 +179,7 @@ export default function SuperBusinesses() {
                       <span className={"inline-flex px-2.5 py-1 rounded-lg text-xs font-bold capitalize " + (INDUSTRY_COLORS[biz.industry]||"bg-slate-100 text-slate-600")}>{biz.industry}</span>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={"text-xs font-bold px-2 py-0.5 rounded-full capitalize " + (PLAN_BADGE[biz.plan]||PLAN_BADGE.starter)}>{biz.plan}</span>
-                      <p className="text-sm font-bold text-slate-800 mt-1">{fmt(biz.mrr)}<span className="text-xs text-slate-400 font-normal">/mo</span></p>
+                      <p className="text-base font-bold text-slate-900">{fmt(biz.mrr)}<span className="text-xs text-slate-400 font-normal">/mo</span></p>
                     </td>
                     <td className="px-6 py-4">
                       <p className="text-xs text-slate-600"><span className="font-bold">{biz.client_count||0}</span> clients</p>
@@ -294,26 +279,14 @@ export default function SuperBusinesses() {
                     </select>
                   </div>
                   <div className="col-span-2">
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Plan</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {PLANS.map(p => {
-                        const d = PLAN_DETAILS[p];
-                        const sel = form.plan === p;
-                        return (
-                          <button key={p} type="button" onClick={()=>handlePlanChange(p)}
-                            className={"text-left p-3 rounded-xl border-2 transition-all " + (sel ? "border-orange-400 bg-orange-50" : d.color + " hover:border-slate-300")}>
-                            <div className="flex items-center justify-between mb-1">
-                              <span className={"text-xs font-bold px-2 py-0.5 rounded-full " + (sel?"bg-orange-500 text-white":d.badge)}>{d.label}</span>
-                              <span className="text-sm font-bold text-slate-800">{d.price}<span className="text-xs text-slate-400 font-normal">/mo</span></span>
-                            </div>
-                            <p className="text-xs text-slate-500 leading-snug mb-1.5">{d.desc}</p>
-                            <ul className="space-y-0.5">
-                              {d.features.slice(0,3).map((f,i) => <li key={i} className="text-xs text-slate-600 flex items-center gap-1"><span className="text-emerald-500 font-bold">✓</span>{f}</li>)}
-                              {d.features.length > 3 && <li className="text-xs text-slate-400">+{d.features.length-3} more</li>}
-                            </ul>
-                          </button>
-                        );
-                      })}
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">Services <span className="text-slate-400 font-normal text-xs">(click to add to MRR)</span></label>
+                    <div className="flex flex-wrap gap-2">
+                      {SERVICE_TAGS.map(tag => (
+                        <button key={tag.id} type="button" onClick={()=>toggleTag(tag)}
+                          className={"px-3 py-1.5 rounded-xl text-xs font-bold border-2 transition-all " + (activeTags.has(tag.id) ? "bg-orange-500 text-white border-orange-500" : "border-slate-200 text-slate-600 hover:border-orange-300")}>
+                          {tag.label} <span className="opacity-70">+{"$"}{tag.mrr}/mo</span>
+                        </button>
+                      ))}
                     </div>
                   </div>
                   <div>
@@ -328,9 +301,10 @@ export default function SuperBusinesses() {
                     <label className="block text-sm font-semibold text-slate-700 mb-1.5">Phone</label>
                     <input type="tel" placeholder="404-000-0000" value={form.phone} onChange={e=>setForm(f=>({...f,phone:e.target.value}))} className={inp} />
                   </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">MRR ($)</label>
-                    <input type="number" step="1" min="0" value={form.mrr} onChange={e=>setForm(f=>({...f,mrr:e.target.value}))} className={inp} />
+                  <div className="col-span-2">
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Monthly Retainer ($)</label>
+                    <input type="number" step="1" min="0" placeholder="0" value={form.mrr} onChange={e=>setForm(f=>({...f,mrr:e.target.value}))} className={inp} />
+                    <p className="text-xs text-slate-400 mt-1">Auto-calculated from services above, or enter manually.</p>
                   </div>
                 </div>
                 <div className="flex gap-3 pt-2">
