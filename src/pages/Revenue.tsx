@@ -96,7 +96,7 @@ const INDUSTRY_TEMPLATES: Record<string, any[]> = {
 
 const MANUAL_TEMPLATE = INDUSTRY_TEMPLATES["general"];
 
-export default function Revenue({ user }: { user?: any }) { user }: { user?: any }) {
+export default function Revenue({ user }: { user?: any }) {
   const [stats, setStats] = useState<any>(null);
   const [manualRevenue, setManualRevenue] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
