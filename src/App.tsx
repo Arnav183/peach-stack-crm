@@ -79,6 +79,7 @@ export default function App() {
                 <Routes>
                   <Route path="/dashboard" element={<SuperDashboard />} />
                   <Route path="/businesses" element={<SuperBusinesses />} />
+                <Route path="/quote" element={<SuperQuote />} />
                   <Route path="*" element={<Navigate to="/super/dashboard" />} />
                 </Routes>
               </main>
