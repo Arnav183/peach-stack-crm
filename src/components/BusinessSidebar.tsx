@@ -128,7 +128,14 @@ export default function BusinessSidebar({ user, onLogout }: Props) {
       </aside>
       <div className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-[#0f172a] border-b border-white/10 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 bg-orange-500 rounded-lg flex items-center justify-center text-white font-bold text-xs shadow-lg shadow-orange-500/30">PS</div>
+          <div className="w-9 h-9 flex items-center justify-center shrink-0"><svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style={{width:'100%',height:'100%'}}>
+              <line x1="50" y1="18" x2="46" y2="10" stroke="#2a6a2a" strokeWidth="4" strokeLinecap="round"/>
+              <ellipse cx="55" cy="8" rx="8" ry="5" fill="#3a8a3a" transform="rotate(-25 55 8)"/>
+              <path d="M50 88 C30 72 12 58 12 40 C12 28 22 20 34 20 C41 20 47 24 50 28 C53 24 59 20 66 20 C78 20 88 28 88 40 C88 58 70 72 50 88Z" fill="none" stroke="#e8795a" strokeWidth="5" strokeLinejoin="round"/>
+              <rect x="33" y="37" width="34" height="9" rx="4" fill="#f5e6d3"/>
+              <rect x="30" y="50" width="40" height="9" rx="4" fill="#e8795a"/>
+              <rect x="33" y="63" width="34" height="9" rx="4" fill="#c4522a"/>
+            </svg></div>
           <span className="font-bold text-sm text-white tracking-tight truncate max-w-[180px]">{user?.business_name}</span>
         </div>
         <button onClick={() => setMobileOpen(true)} className="p-2 rounded-xl text-slate-400 hover:bg-white/10 hover:text-white transition-all"><Menu className="w-5 h-5" /></button>
