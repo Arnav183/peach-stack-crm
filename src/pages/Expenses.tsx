@@ -92,7 +92,7 @@ const INDUSTRY_EXPENSE_TEMPLATES: Record<string, any[]> = {
 
 const TEMPLATE_ROWS = INDUSTRY_EXPENSE_TEMPLATES["general"];
 
-export default function Expensesexport default function Expenses({ user }: { user?: any }) {
+export default function Expenses({ user }: { user?: any }) {
   const [expenses, setExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
