@@ -1,4 +1,5 @@
-feat: multi-tenant server - 3 roles, business isolation, rate limiting, security hardeningimport { createServer as createViteServer } from "vite";
+import express from "express";
+import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import { existsSync, unlinkSync } from "fs";
