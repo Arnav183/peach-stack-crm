@@ -72,6 +72,7 @@ export default function Invoices() {
   const totalPaid = invoices.filter(i => i.status === "Paid").reduce((s, i) => s + i.amount, 0);
 
   return (
+    <div className="p-8 bg-slate-50 min-h-screen">
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -177,6 +178,7 @@ export default function Invoices() {
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 }
