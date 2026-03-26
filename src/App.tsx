@@ -9,6 +9,7 @@ import AdminLogin from "./pages/AdminLogin";
 import SuperSidebar from "./components/SuperSidebar";
 import SuperDashboard from "./pages/super/SuperDashboard";
 import SuperBusinesses from "./pages/super/SuperBusinesses";
+import SuperQuote from "./pages/super/SuperQuote";
 
 // Business pages
 import BusinessSidebar from "./components/BusinessSidebar";
