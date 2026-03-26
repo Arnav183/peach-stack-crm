@@ -96,8 +96,8 @@ export default function App() {
                   <Route path="/clients" element={<Clients />} />
                   <Route path="/clients/:id" element={<ClientDetail />} />
                   <Route path="/appointments" element={<Appointments />} />
-                  <Route path="/revenue" element={<Revenue />} />
-                  <Route path="/expenses" element={<Expenses />} />
+                  <Route path="/revenue" element={<Revenue user={user} />} />
+                  <Route path="/expenses" element={<Expenses user={user} />} />
                   <Route path="/invoices" element={<Invoices />} />
                   <Route path="/accounts" element={<Accounts />} />
                   <Route path="/settings" element={<Settings user={user} />} />
