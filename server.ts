@@ -70,6 +70,7 @@ db.exec(`
     address TEXT,
     plan TEXT DEFAULT 'starter',
     mrr REAL DEFAULT 0,
+    plan_services TEXT DEFAULT '[]',
     status TEXT DEFAULT 'active',
     settings TEXT DEFAULT '{}',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -535,7 +536,80 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  
+// ── Plan & Invoice routes ─────────────────────────────────────────────────────
+
+// Update a business plan_services and recalculate mrr
+app.put('/api/super/businesses/:id/plan', requireSuperAdmin, (req, res) => {
+  const { plan_services } = req.body; // array of service IDs
+  if (!Array.isArray(plan_services)) return res.status(400).json({ error: 'plan_services must be an array' });
+
+  // Service catalog monthly prices (mirrors SuperQuote.tsx)
+  const MONTHLY: Record<string, number> = {
+    'crm': 25, 'website-basic': 15, 'website-custom': 25, 'seo': 15,
+    'booking': 10, 'reminders': 10, 'ai-phone': 35, 'ai-chat': 15,
+    'ai-followup': 15, 'reviews': 12, 'email-sms': 15, 'priority-support': 20,
+  };
+  const mrr = plan_services.reduce((sum: number, id: string) => sum + (MONTHLY[id] ?? 0), 0);
+
+  db.run(
+    'UPDATE businesses SET plan_services = ?, mrr = ? WHERE id = ?',
+    [JSON.stringify(plan_services), mrr, req.params.id],
+    function(err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ success: true, mrr });
+    }
+  );
+});
+
+// Get invoices for a business (last 3 months + next 3 months)
+app.get('/api/super/businesses/:id/invoices', requireSuperAdmin, (req, res) => {
+  const bizId = parseInt(req.params.id);
+  db.get('SELECT name, mrr, plan_services FROM businesses WHERE id = ?', [bizId], (err, biz: any) => {
+    if (err || !biz) return res.status(404).json({ error: 'Business not found' });
+
+    const mrr = biz.mrr || 0;
+    const now = new Date();
+    const invoices = [];
+
+    // Past 3 months (paid)
+    for (let i = 3; i >= 1; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      invoices.push({
+        id: 'inv-past-' + i,
+        period: d.toLocaleString('default', { month: 'long', year: 'numeric' }),
+        amount: mrr,
+        status: 'paid',
+        due_date: new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0],
+      });
+    }
+
+    // Current month (due)
+    invoices.push({
+      id: 'inv-current',
+      period: now.toLocaleString('default', { month: 'long', year: 'numeric' }),
+      amount: mrr,
+      status: 'due',
+      due_date: new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0],
+    });
+
+    // Next 2 months (upcoming)
+    for (let i = 1; i <= 2; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      invoices.push({
+        id: 'inv-upcoming-' + i,
+        period: d.toLocaleString('default', { month: 'long', year: 'numeric' }),
+        amount: mrr,
+        status: 'upcoming',
+        due_date: d.toISOString().split('T')[0],
+      });
+    }
+
+    res.json({ business_name: biz.name, mrr, plan_services: JSON.parse(biz.plan_services || '[]'), invoices });
+  });
+});
+
+app.listen(PORT, "0.0.0.0", () => {
     console.log("Server running on port " + PORT);
   });
 }
