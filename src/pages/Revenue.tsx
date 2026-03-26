@@ -387,5 +387,7 @@ export default function Revenue({ user }: { user?: any }) {
       )}
     </div>
     </div>
+    </div>
+    </div>
   );
 }
