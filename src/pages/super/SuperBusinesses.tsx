@@ -3,8 +3,34 @@ import { Plus, Search, MoreHorizontal, RefreshCw, Trash2, X, Eye, EyeOff, Copy, 
 import { format, parseISO } from "date-fns";
 
 const INDUSTRIES = ["beauty","auto","restaurant","medical","retail","fitness","agency","general"];
-const PLANS = ["starter","pro","growth","enterprise"];
-const PLAN_MRR: Record<string,number> = { starter:49, pro:149, growth:299, enterprise:499 };
+const PLAN_DETAILS: Record<string,{label:string;price:number;desc:string;features:string[];color:string;badge:string}> = {
+  starter: {
+    label: "Starter", price: 49,
+    desc: "Perfect for solo operators just getting started.",
+    features: ["Up to 50 clients","Appointments & history","Basic revenue tracking","Client portal access","Email support"],
+    color: "border-slate-200 bg-slate-50", badge: "bg-slate-100 text-slate-600"
+  },
+  pro: {
+    label: "Pro", price: 149,
+    desc: "Most popular — full platform for growing businesses.",
+    features: ["Up to 250 clients","Appointments + staff tracking","Revenue & expense P&L","Excel import/export","Invoice generation","Client portal + login","Priority support"],
+    color: "border-blue-200 bg-blue-50", badge: "bg-blue-50 text-blue-700"
+  },
+  growth: {
+    label: "Growth", price: 299,
+    desc: "For established businesses ready to scale.",
+    features: ["Up to 1,000 clients","Everything in Pro","Advanced analytics & charts","Multi-staff management","Tips & gratuity tracking","Custom Excel templates","Dedicated onboarding"],
+    color: "border-emerald-200 bg-emerald-50", badge: "bg-emerald-50 text-emerald-700"
+  },
+  enterprise: {
+    label: "Enterprise", price: 499,
+    desc: "High-volume operations with custom needs.",
+    features: ["Unlimited clients","Everything in Growth","White-label option","Custom industry setup","Priority phone support","Quarterly business reviews","SLA guarantee"],
+    color: "border-purple-200 bg-purple-50", badge: "bg-purple-50 text-purple-700"
+  },
+};
+const PLANS = Object.keys(PLAN_DETAILS);
+const PLAN_MRR: Record<string,number> = Object.fromEntries(Object.entries(PLAN_DETAILS).map(([k,v])=>[k,v.price]));
 
 const INDUSTRY_COLORS: Record<string,string> = {
   beauty:"bg-orange-100 text-orange-700", auto:"bg-blue-100 text-blue-700",
@@ -267,11 +293,28 @@ export default function SuperBusinesses() {
                       {INDUSTRIES.map(i=><option key={i} value={i} className="capitalize">{i.charAt(0).toUpperCase()+i.slice(1)}</option>)}
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Plan</label>
-                    <select value={form.plan} onChange={e=>handlePlanChange(e.target.value)} className={inp}>
-                      {PLANS.map(p=><option key={p} value={p} className="capitalize">{p.charAt(0).toUpperCase()+p.slice(1)} ({fmt(PLAN_MRR[p])}/mo)</option>)}
-                    </select>
+                  <div className="col-span-2">
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">Plan</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {PLANS.map(p => {
+                        const d = PLAN_DETAILS[p];
+                        const sel = form.plan === p;
+                        return (
+                          <button key={p} type="button" onClick={()=>handlePlanChange(p)}
+                            className={"text-left p-3 rounded-xl border-2 transition-all " + (sel ? "border-orange-400 bg-orange-50" : d.color + " hover:border-slate-300")}>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className={"text-xs font-bold px-2 py-0.5 rounded-full " + (sel?"bg-orange-500 text-white":d.badge)}>{d.label}</span>
+                              <span className="text-sm font-bold text-slate-800">{d.price{"}"}<span className="text-xs text-slate-400 font-normal">/mo</span></span>
+                            </div>
+                            <p className="text-xs text-slate-500 leading-snug mb-1.5">{d.desc}</p>
+                            <ul className="space-y-0.5">
+                              {d.features.slice(0,3).map((f,i) => <li key={i} className="text-xs text-slate-600 flex items-center gap-1"><span className="text-emerald-500 font-bold">✓</span>{f}</li>)}
+                              {d.features.length > 3 && <li className="text-xs text-slate-400">+{d.features.length-3} more</li>}
+                            </ul>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-slate-700 mb-1.5">Owner Name</label>
