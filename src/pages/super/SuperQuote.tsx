@@ -1,21 +1,21 @@
 import { useState } from "react";
-import { Check, Copy, CheckCircle2, ChevronDown, ChevronUp, Sparkles } from "lucide-react";
+import { Check, Copy, CheckCircle2, ChevronDown, ChevronUp, Sparkles, Download, Mail } from "lucide-react";
 
 const SERVICES = [
-  { id:"crm", cat:"Core", name:"CRM Dashboard", desc:"Client mgmt, appointments, revenue, invoices & portal.", one_time:0, monthly:30, required:true },
-  { id:"onboard", cat:"Core", name:"Onboarding & Setup", desc:"Import client list, configure settings, training.", one_time:150, monthly:0 },
-  { id:"web_basic", cat:"Website", name:"Basic Website (5 pages)", desc:"Home, About, Services, Gallery, Contact. Mobile-friendly.", one_time:350, monthly:20 },
-  { id:"web_custom", cat:"Website", name:"Custom Website", desc:"Full custom design, animations, booking integration, SEO.", one_time:800, monthly:35 },
-  { id:"seo", cat:"Website", name:"Local SEO Setup", desc:"Google Business Profile, keywords, local citations.", one_time:150, monthly:25 },
-  { id:"calendar", cat:"Bookings", name:"Online Booking Calendar", desc:"Clients book 24/7 from your site. Syncs with CRM.", one_time:100, monthly:15 },
-  { id:"reminders", cat:"Bookings", name:"Appointment Reminders", desc:"Automated SMS/email reminders. Reduces no-shows ~40%.", one_time:75, monthly:15 },
-  { id:"ai_phone", cat:"AI", name:"AI Phone Agent", desc:"Answers calls 24/7, books appointments, answers FAQs.", one_time:200, monthly:50 },
-  { id:"ai_chat", cat:"AI", name:"AI Chat Widget", desc:"Answers questions, captures leads, books appointments.", one_time:100, monthly:20 },
-  { id:"followup", cat:"AI", name:"Auto Follow-up Sequences", desc:"Auto texts/emails after appointments for reviews/rebooking.", one_time:100, monthly:20 },
-  { id:"reviews", cat:"Marketing", name:"Review Management", desc:"Auto-request Google reviews after every appointment.", one_time:75, monthly:20 },
-  { id:"email_mkt", cat:"Marketing", name:"Email & SMS Marketing", desc:"Monthly newsletters, promos, re-engagement campaigns.", one_time:75, monthly:25 },
-  { id:"social", cat:"Marketing", name:"Social Media Templates", desc:"20 branded Canva templates for Instagram & Facebook.", one_time:150, monthly:0 },
-  { id:"support", cat:"Support", name:"Priority Support", desc:"Same-day response, monthly check-in call, monitoring.", one_time:0, monthly:30 },
+  { id:"crm", cat:"Core", name:"CRM Dashboard", desc:"Client mgmt, appointments, revenue tracking, invoices & client portal. Your business HQ.", one_time:0, monthly:30, required:true },
+  { id:"onboard", cat:"Core", name:"Onboarding & Data Setup", desc:"We import your client list, configure your industry settings, and get you fully set up.", one_time:99, monthly:0 },
+  { id:"web_basic", cat:"Website", name:"Basic Website (5 pages)", desc:"Home, About, Services, Gallery, Contact. Mobile-friendly. Includes domain + hosting setup. Freelancers charge $2k-8k for this.", one_time:599, monthly:20 },
+  { id:"web_custom", cat:"Website", name:"Custom Website", desc:"Full custom design, animations, online booking built-in, photo gallery, SEO-optimized. Best for restaurants, medical, fitness.", one_time:1199, monthly:35 },
+  { id:"seo", cat:"Website", name:"Local SEO Setup", desc:"Google Business Profile optimization, keyword targeting, local citations. Get found on Google Maps.", one_time:99, monthly:20 },
+  { id:"calendar", cat:"Bookings", name:"Online Booking Calendar", desc:"Clients book 24/7 from your website or a booking link. Auto-syncs with your CRM.", one_time:75, monthly:12 },
+  { id:"reminders", cat:"Bookings", name:"Appointment Reminders", desc:"Automated SMS + email reminders sent before appointments. Reduces no-shows by ~40%.", one_time:50, monthly:12 },
+  { id:"ai_phone", cat:"AI", name:"AI Phone Agent", desc:"Answers calls 24/7, books appointments, answers your FAQs. Sounds natural. Never misses a lead.", one_time:149, monthly:45 },
+  { id:"ai_chat", cat:"AI", name:"AI Website Chat Widget", desc:"Instant answers on your website, captures leads, books appointments automatically.", one_time:75, monthly:18 },
+  { id:"followup", cat:"AI", name:"Auto Follow-up Sequences", desc:"Automatic texts + emails after appointments to request reviews, offer rebooking, or run promos.", one_time:75, monthly:18 },
+  { id:"reviews", cat:"Marketing", name:"Review Management", desc:"Auto-request Google reviews after every visit. Monitor and respond from one place. (Podium charges $289/mo for this.)", one_time:50, monthly:15 },
+  { id:"email_mkt", cat:"Marketing", name:"Email & SMS Marketing", desc:"Monthly newsletters, promotions, and re-engagement campaigns sent to your full client list.", one_time:50, monthly:20 },
+  { id:"social", cat:"Marketing", name:"Social Media Templates", desc:"20 branded Canva templates for Instagram and Facebook, matched to your brand colors + logo.", one_time:99, monthly:0 },
+  { id:"support", cat:"Support", name:"Priority Support", desc:"Same-day response, monthly check-in call, proactive monitoring, and platform updates.", one_time:0, monthly:25 },
 ];
 
 const CATS = ["Core", "Website", "Bookings", "AI", "Marketing", "Support"];
@@ -33,6 +33,7 @@ export default function SuperQuote() {
   const [sel, setSel] = useState<Set<string>>(new Set(["crm"]));
   const [clientBiz, setClientBiz] = useState("");
   const [clientName, setClientName] = useState("");
+  const [clientEmail, setClientEmail] = useState("");
   const [note, setNote] = useState("");
   const [discount, setDiscount] = useState(0);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -49,30 +50,73 @@ export default function SuperQuote() {
   const oneTimeDisc = Math.round(oneTime * (1 - discount / 100));
   const year1 = oneTimeDisc + monthly * 12;
 
-  const copyQuote = async () => {
+  const buildRows = () => {
     const rows: string[] = ["PEACH STACK — SERVICE QUOTE", "================================"];
     if (clientBiz) rows.push("Client: " + clientBiz + (clientName ? " (" + clientName + ")" : ""));
     rows.push("Date: " + new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }));
-    rows.push("", "SERVICES:", "--------------------------------");
+    rows.push("", "SERVICES INCLUDED:", "--------------------------------");
     chosen.forEach(s => {
       rows.push("  " + s.name);
-      if (s.one_time > 0) rows.push("    Setup: $" + String(s.one_time));
+      if (s.one_time > 0) rows.push("    One-time: $" + String(s.one_time));
       if (s.monthly > 0) rows.push("    Monthly: $" + String(s.monthly) + "/mo");
       if (s.one_time === 0 && s.monthly === 0) rows.push("    Included free");
     });
     rows.push("", "--------------------------------");
     if (discount > 0) {
-      rows.push("One-time: $" + String(oneTime) + "  ->  $" + String(oneTimeDisc) + " (" + String(discount) + "% off)");
+      rows.push("One-time total: $" + String(oneTime) + "  ->  $" + String(oneTimeDisc) + " (" + String(discount) + "% startup discount)");
     } else {
-      rows.push("One-time: $" + String(oneTime));
+      rows.push("One-time total: $" + String(oneTime));
     }
-    rows.push("Monthly: $" + String(monthly) + "/mo");
-    rows.push("Year 1 total: $" + year1.toLocaleString());
+    rows.push("Monthly retainer: $" + String(monthly) + "/mo");
+    rows.push("Year 1 investment: $" + year1.toLocaleString());
     if (note) { rows.push("", "Note: " + note); }
-    rows.push("", "Questions? peachstack.dev", "================================");
-    await navigator.clipboard.writeText(rows.join("\n"));
+    rows.push("", "Ready to get started? Reply to this message.", "Questions? peachstack.dev", "================================");
+    return rows;
+  };
+
+  const copyQuote = async () => {
+    await navigator.clipboard.writeText(buildRows().join("\n"));
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
+  };
+
+  const exportExcel = () => {
+    const rows = [
+      ["PEACH STACK — SERVICE QUOTE", "", ""],
+      ["Client", clientBiz || "-", ""],
+      ["Contact", clientName || "-", ""],
+      ["Date", new Date().toLocaleDateString(), ""],
+      ["", "", ""],
+      ["SERVICE", "ONE-TIME ($)", "MONTHLY ($/mo)"],
+    ];
+    chosen.forEach(s => {
+      rows.push([s.name, s.one_time > 0 ? String(s.one_time) : "Included", s.monthly > 0 ? String(s.monthly) : "-"]);
+    });
+    rows.push(["", "", ""]);
+    if (discount > 0) {
+      rows.push(["One-time total (before discount)", String(oneTime), ""]);
+      rows.push(["Startup discount (" + String(discount) + "%)", "-" + String(oneTime - oneTimeDisc), ""]);
+    }
+    rows.push(["ONE-TIME TOTAL", String(oneTimeDisc), ""]);
+    rows.push(["MONTHLY RETAINER", "", String(monthly)]);
+    rows.push(["YEAR 1 TOTAL", String(year1), ""]);
+    if (note) { rows.push([""," ",""]); rows.push(["Note", note, ""]); }
+
+    const csv = rows.map(r => r.map(c => '"' + c.replace(/"/g, '""') + '"').join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = (clientBiz || "quote") + "-peachstack-quote.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const emailQuote = () => {
+    const body = encodeURIComponent(buildRows().join("\n"));
+    const subject = encodeURIComponent("Your Custom Quote — Peach Stack" + (clientBiz ? " for " + clientBiz : ""));
+    const to = encodeURIComponent(clientEmail || "");
+    window.open("mailto:" + to + "?subject=" + subject + "&body=" + body);
   };
 
   return (
@@ -83,7 +127,7 @@ export default function SuperQuote() {
             <Sparkles className="w-6 h-6 text-orange-500" />
             Quote Builder
           </h1>
-          <p className="text-slate-500 text-sm mt-1">Mix and match services to build a custom quote.</p>
+          <p className="text-slate-500 text-sm mt-1">Mix and match services. Export to CSV or email directly to the client.</p>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-3">
@@ -125,7 +169,7 @@ export default function SuperQuote() {
                                 <p className="text-sm font-semibold text-slate-800">{svc.name}</p>
                                 {svc.required && <span className="text-xs bg-orange-100 text-orange-600 font-bold px-1.5 py-0.5 rounded">Required</span>}
                               </div>
-                              <p className="text-xs text-slate-500 mt-0.5">{svc.desc}</p>
+                              <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{svc.desc}</p>
                             </div>
                             <div className="text-right shrink-0 text-xs">
                               {svc.one_time > 0 && <p className="font-bold text-slate-700">{"$"}{svc.one_time} <span className="font-normal text-slate-400">setup</span></p>}
@@ -147,6 +191,8 @@ export default function SuperQuote() {
               <input type="text" placeholder="Business name" value={clientBiz} onChange={e => setClientBiz(e.target.value)}
                 className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-400" />
               <input type="text" placeholder="Contact name" value={clientName} onChange={e => setClientName(e.target.value)}
+                className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-400" />
+              <input type="email" placeholder="Client email (for sending quote)" value={clientEmail} onChange={e => setClientEmail(e.target.value)}
                 className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-400" />
               <textarea placeholder="Note for client..." value={note} onChange={e => setNote(e.target.value)} rows={2}
                 className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none" />
@@ -194,8 +240,18 @@ export default function SuperQuote() {
                 <p className="text-xs text-slate-400">Year 1: <span className="font-semibold text-slate-600">{"$"}{year1.toLocaleString()}</span></p>
               </div>
               <button onClick={copyQuote}
-                className="w-full flex items-center justify-center gap-2 py-3 bg-orange-500 text-white rounded-xl font-bold text-sm hover:bg-orange-400 transition-all shadow-lg shadow-orange-500/20">
+                className="w-full flex items-center justify-center gap-2 py-2.5 bg-orange-500 text-white rounded-xl font-bold text-sm hover:bg-orange-400 transition-all shadow-lg shadow-orange-500/20">
                 {copied ? <><CheckCircle2 className="w-4 h-4" />Copied!</> : <><Copy className="w-4 h-4" />Copy Quote</>}
+              </button>
+              <button onClick={exportExcel}
+                className="w-full flex items-center justify-center gap-2 py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-sm hover:bg-emerald-500 transition-all">
+                <Download className="w-4 h-4" />
+                Export to Excel (CSV)
+              </button>
+              <button onClick={emailQuote}
+                className="w-full flex items-center justify-center gap-2 py-2.5 bg-slate-800 text-white rounded-xl font-bold text-sm hover:bg-slate-700 transition-all">
+                <Mail className="w-4 h-4" />
+                Email to Client
               </button>
             </div>
           </div>
