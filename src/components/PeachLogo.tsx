@@ -1,12 +1,20 @@
 export default function PeachLogo({ size = 36 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-      <line x1="50" y1="18" x2="46" y2="10" stroke="#2a6a2a" strokeWidth="4" strokeLinecap="round"/>
-      <ellipse cx="55" cy="8" rx="8" ry="5" fill="#3a8a3a" transform="rotate(-25 55 8)"/>
-      <path d="M50 88 C30 72 12 58 12 40 C12 28 22 20 34 20 C41 20 47 24 50 28 C53 24 59 20 66 20 C78 20 88 28 88 40 C88 58 70 72 50 88Z" fill="none" stroke="#e8795a" strokeWidth="5" strokeLinejoin="round"/>
-      <rect x="33" y="37" width="34" height="9" rx="4" fill="#f5e6d3"/>
-      <rect x="30" y="50" width="40" height="9" rx="4" fill="#e8795a"/>
-      <rect x="33" y="63" width="34" height="9" rx="4" fill="#c4522a"/>
+    <svg width={size} height={size} viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" fill="none">
+      {/* Stem */}
+      <path d="M60 22 C57 15 53 10 50 7" stroke="#2d6b2d" strokeWidth="4.5" strokeLinecap="round"/>
+      {/* Leaf */}
+      <ellipse cx="56" cy="9" rx="10" ry="6" fill="#3d8c3d" transform="rotate(-30 56 9)"/>
+      {/* Peach/heart body with notch at top center */}
+      <path d="M60 105 C38 88 14 72 14 50 C14 35 25 26 38 26 C46 26 53 30 60 36 C67 30 74 26 82 26 C95 26 106 35 106 50 C106 72 82 88 60 105 Z" stroke="#e07860" strokeWidth="6" strokeLinejoin="round" fill="none"/>
+      {/* Top cleft/notch */}
+      <path d="M52 30 C55 35 60 36 60 36 C60 36 65 35 68 30" stroke="#e07860" strokeWidth="4" strokeLinecap="round" fill="none"/>
+      {/* Bar 1 - cream/white */}
+      <rect x="36" y="46" width="48" height="12" rx="5" fill="#f0e0cc"/>
+      {/* Bar 2 - orange */}
+      <rect x="32" y="63" width="56" height="12" rx="5" fill="#e07858"/>
+      {/* Bar 3 - dark burnt orange */}
+      <rect x="36" y="80" width="48" height="12" rx="5" fill="#c04828"/>
     </svg>
   );
 }
