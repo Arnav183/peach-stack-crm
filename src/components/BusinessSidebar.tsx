@@ -55,9 +55,7 @@ function SidebarContent({ user, onLogout, onNav }: { user: any; onLogout: () => 
     <div className="p-5 flex flex-col h-full">
       {/* Logo + industry badge */}
       <div className="flex items-center gap-3 mb-6 px-1">
-        <div className="w-9 h-9 bg-orange-500 rounded-xl flex items-center justify-center text-white shadow-lg shadow-orange-500/30 shrink-0">
-          <IndustryIcon className="w-4 h-4" />
-        </div>
+        <PeachLogo size={36} />
         <div className="min-w-0">
           <p className="font-bold text-sm text-white tracking-tight truncate">{user?.business_name || "My Business"}</p>
           <p className="text-[10px] text-slate-500 font-medium uppercase tracking-widest mt-0.5 capitalize">{industry}</p>
