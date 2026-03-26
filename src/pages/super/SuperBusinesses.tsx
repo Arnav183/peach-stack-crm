@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Plus, Search, MoreHorizontal, RefreshCw, Trash2, X, Eye, EyeOff, Copy, CheckCircle2, AlertCircle, Building2 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 
@@ -32,6 +33,7 @@ const inp = "w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline
 function genPw() { const c="abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789!@#"; return Array.from({length:14},()=>c[Math.floor(Math.random()*c.length)]).join(""); }
 
 export default function SuperBusinesses() {
+  const navigate = useNavigate();
   const [businesses, setBusinesses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -170,7 +172,7 @@ export default function SuperBusinesses() {
               </tr></thead>
               <tbody className="divide-y divide-slate-50">
                 {filtered.map(biz => (
-                  <tr key={biz.id} className="hover:bg-slate-50/60 transition-colors">
+                  <tr key={biz.id} onClick={() => navigate('/super/businesses/' + biz.id)} className="hover:bg-slate-50/60 transition-colors cursor-pointer">
                     <td className="px-6 py-4">
                       <p className="text-sm font-semibold text-slate-900">{biz.name}</p>
                       <p className="text-xs text-slate-400 truncate max-w-[180px]">{biz.admin_email || biz.owner_email}</p>
