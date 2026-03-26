@@ -79,8 +79,8 @@ db.prepare("INSERT INTO users (email,password,role,name) VALUES (?,?,'superadmin
 console.log("Superadmin created: " + SA_EMAIL);
 
 // ── BUSINESS 1: Hair / Beauty Salon ─────────────────────────────────────────
-const b1 = db.prepare("INSERT INTO businesses (name,industry,owner_name,owner_email,phone,plan,mrr,status,created_at) VALUES (?,?,?,?,?,?,?,?,?)")
-  .run("Luxe Threading Studio","beauty","Priya Sharma","priya@luxethreading.com","404-291-0847","pro",149,"active","2025-04-01 10:00:00");
+const b1 = db.prepare("INSERT INTO businesses (name,industry,owner_name,owner_email,phone,plan,mrr,plan_services,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)")
+  .run("Luxe Threading Studio","beauty","Priya Sharma","priya@luxethreading.com","404-291-0847","starter",72,'["crm","onboarding","website-basic","booking","reminders","reviews"]' ,"active","2025-04-01 10:00:00");
 const BID1 = b1.lastInsertRowid;
 db.prepare("INSERT INTO users (email,password,role,business_id,name,must_change_password,created_at) VALUES (?,?,'business_admin',?,?,0,?)")
   .run("priya@luxethreading.com", bcrypt.hashSync("demo1234", 12), BID1, "Priya Sharma","2025-04-01 10:00:00");
@@ -160,8 +160,8 @@ for (const e of b1exp) insE.run(...e);
 console.log("Business 1 (Beauty) seeded");
 
 // ── BUSINESS 2: Auto Shop ────────────────────────────────────────────────────
-const b2 = db.prepare("INSERT INTO businesses (name,industry,owner_name,owner_email,phone,plan,mrr,status,created_at) VALUES (?,?,?,?,?,?,?,?,?)")
-  .run("Metro Auto Works","auto","Marcus Johnson","marcus@metroauto.com","404-555-0182","pro",199,"active","2025-06-15 09:00:00");
+const b2 = db.prepare("INSERT INTO businesses (name,industry,owner_name,owner_email,phone,plan,mrr,plan_services,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)")
+  .run("Metro Auto Works","auto","Marcus Johnson","marcus@metroauto.com","404-555-0182","starter",60,'["crm","onboarding","website-basic","booking","reminders"]' ,"active","2025-06-15 09:00:00");
 const BID2 = b2.lastInsertRowid;
 db.prepare("INSERT INTO users (email,password,role,business_id,name,must_change_password,created_at) VALUES (?,?,'business_admin',?,?,0,?)")
   .run("marcus@metroauto.com", bcrypt.hashSync("demo1234", 12), BID2, "Marcus Johnson","2025-06-15 09:00:00");
@@ -218,8 +218,8 @@ for (const e of b2exp) insE.run(...e);
 console.log("Business 2 (Auto) seeded");
 
 // ── BUSINESS 3: Restaurant / Cafe ───────────────────────────────────────────
-const b3 = db.prepare("INSERT INTO businesses (name,industry,owner_name,owner_email,phone,plan,mrr,status,created_at) VALUES (?,?,?,?,?,?,?,?,?)")
-  .run("Peachtree Bites Cafe","restaurant","Amara Osei","amara@peachtreebites.com","404-876-4430","growth",299,"active","2025-08-01 09:00:00");
+const b3 = db.prepare("INSERT INTO businesses (name,industry,owner_name,owner_email,phone,plan,mrr,plan_services,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)")
+  .run("Peachtree Bites Cafe","restaurant","Amara Osei","amara@peachtreebites.com","404-876-4430","growth",112,'["crm","onboarding","website-custom","booking","reminders","seo","reviews","email-sms"]' ,"active","2025-08-01 09:00:00");
 const BID3 = b3.lastInsertRowid;
 db.prepare("INSERT INTO users (email,password,role,business_id,name,must_change_password,created_at) VALUES (?,?,'business_admin',?,?,0,?)")
   .run("amara@peachtreebites.com", bcrypt.hashSync("demo1234", 12), BID3, "Amara Osei","2025-08-01 09:00:00");
