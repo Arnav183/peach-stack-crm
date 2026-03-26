@@ -1,75 +1,84 @@
 import { useState } from 'react';
-import { Check, FileText, Zap, Globe, LayoutDashboard, Calendar, ShoppingCart, MessageSquare, Bell, BarChart2, Shield, Smartphone } from 'lucide-react';
-
-// ─── Service Catalog ─────────────────────────────────────────────────────────
-// Each service has a one-time build fee and an optional monthly retainer.
-// The admin checks whatever services apply to the client and gets a live quote.
+import { Check, FileText, Globe, LayoutDashboard, Calendar, Bell, MessageSquare, BarChart2, Shield, Star, Mail, Image } from 'lucide-react';
 
 type Service = {
   id: string;
   category: string;
   name: string;
   description: string;
-  oneTime: number;
+  oneTime: number | null;
   monthly: number | null;
+  required?: boolean;
   icon: React.ReactNode;
 };
 
 const SERVICES: Service[] = [
-  // Websites
-  { id: 'website-basic',    category: 'Website',        name: 'Basic Website (5 pages)',       description: 'Home, About, Services, Contact + 1 custom page',          oneTime: 800,   monthly: 79,  icon: <Globe size={16} /> },
-  { id: 'website-full',     category: 'Website',        name: 'Full Website (10+ pages)',       description: 'Custom design, blog, galleries, advanced layout',          oneTime: 1500,  monthly: 99,  icon: <Globe size={16} /> },
-  { id: 'website-ecomm',    category: 'Website',        name: 'E-Commerce Store',               description: 'Product listings, cart, checkout, order management',       oneTime: 2200,  monthly: 149, icon: <ShoppingCart size={16} /> },
-  // CRM / Dashboard
-  { id: 'crm-basic',        category: 'CRM & Dashboard',name: 'Client CRM',                     description: 'Client profiles, notes, status tracking, basic reports',   oneTime: 1200,  monthly: 99,  icon: <LayoutDashboard size={16} /> },
-  { id: 'crm-full',         category: 'CRM & Dashboard',name: 'Full Business Dashboard',        description: 'CRM + revenue, invoices, expenses, analytics',             oneTime: 2000,  monthly: 149, icon: <BarChart2 size={16} /> },
+  // Core
+  { id: 'crm',              category: 'Core',       name: 'CRM Dashboard',              description: 'Client management, appointments, revenue, invoices & client portal. Your all-in-one business hub.', oneTime: null, monthly: 25,  required: true, icon: <LayoutDashboard size={15} /> },
+  { id: 'onboarding',       category: 'Core',       name: 'Onboarding & Data Setup',    description: 'We import your client list, set up your industry settings, and walk you through the platform.',    oneTime: 49,   monthly: null, icon: <Shield size={15} /> },
+  // Website
+  { id: 'website-basic',    category: 'Website',    name: 'Basic Website (5 pages)',    description: 'Home, About, Services, Gallery, Contact. Mobile-ready. Domain + hosting included.',               oneTime: 249,  monthly: 15,  icon: <Globe size={15} /> },
+  { id: 'website-custom',   category: 'Website',    name: 'Custom Website',             description: 'Fully custom design, booking integration, photo gallery, SEO-ready. Perfect for restaurants & salons.', oneTime: 599, monthly: 25, icon: <Globe size={15} /> },
+  { id: 'seo',              category: 'Website',    name: 'Local SEO Setup',            description: 'Google Business Profile, keyword setup, local citations. Get found on Google Maps.',               oneTime: 79,   monthly: 15,  icon: <BarChart2 size={15} /> },
   // Bookings
-  { id: 'booking',          category: 'Booking System', name: 'Appointment Booking',            description: 'Online scheduling, reminders, calendar sync',              oneTime: 700,   monthly: 59,  icon: <Calendar size={16} /> },
-  { id: 'booking-staff',    category: 'Booking System', name: 'Multi-Staff Booking',            description: 'Staff management, shift scheduling, per-staff calendars',  oneTime: 1100,  monthly: 89,  icon: <Calendar size={16} /> },
-  // Add-ons
-  { id: 'addon-sms',        category: 'Add-ons',        name: 'SMS / Email Notifications',      description: 'Automated reminders, follow-ups, marketing blasts',        oneTime: 300,   monthly: 39,  icon: <Bell size={16} /> },
-  { id: 'addon-chat',       category: 'Add-ons',        name: 'Live Chat Widget',               description: 'Embedded chat with admin notifications',                   oneTime: 250,   monthly: 29,  icon: <MessageSquare size={16} /> },
-  { id: 'addon-mobile',     category: 'Add-ons',        name: 'Mobile App (PWA)',               description: 'Installable progressive web app from existing site',       oneTime: 800,   monthly: 49,  icon: <Smartphone size={16} /> },
-  { id: 'addon-security',   category: 'Add-ons',        name: 'Security & Compliance Package',  description: 'SSL, backups, uptime monitoring, monthly security report',  oneTime: 200,   monthly: 49,  icon: <Shield size={16} /> },
+  { id: 'booking',          category: 'Bookings',   name: 'Online Booking Calendar',    description: 'Clients book 24/7 from your site or a booking link. Auto-syncs with your CRM.',                   oneTime: 49,   monthly: 10,  icon: <Calendar size={15} /> },
+  { id: 'reminders',        category: 'Bookings',   name: 'Appointment Reminders',      description: 'Automated SMS + email reminders before appointments. Cuts no-shows by ~40%.',                      oneTime: 29,   monthly: 10,  icon: <Bell size={15} /> },
+  // AI
+  { id: 'ai-phone',         category: 'AI',         name: 'AI Phone Agent',             description: 'Answers calls 24/7, books appointments, handles FAQs. Never misses a lead.',                       oneTime: 99,   monthly: 35,  icon: <MessageSquare size={15} /> },
+  { id: 'ai-chat',          category: 'AI',         name: 'AI Website Chat Widget',     description: 'Instant answers on your site, captures leads and books appointments automatically.',               oneTime: 49,   monthly: 15,  icon: <MessageSquare size={15} /> },
+  { id: 'ai-followup',      category: 'AI',         name: 'Auto Follow-up Sequences',   description: 'Automatic texts + emails after visits to get reviews, rebook clients, or run promos.',            oneTime: 49,   monthly: 15,  icon: <Bell size={15} /> },
+  // Marketing
+  { id: 'reviews',          category: 'Marketing',  name: 'Review Management',          description: 'Auto-request Google reviews after every visit. Monitor and respond in one place.',                 oneTime: 29,   monthly: 12,  icon: <Star size={15} /> },
+  { id: 'email-sms',        category: 'Marketing',  name: 'Email & SMS Marketing',      description: 'Monthly newsletters, promotions, and re-engagement blasts to your client list.',                   oneTime: 29,   monthly: 15,  icon: <Mail size={15} /> },
+  { id: 'social',           category: 'Marketing',  name: 'Social Media Templates',     description: '20 branded Canva templates for Instagram + Facebook matched to your brand.',                       oneTime: 79,   monthly: null, icon: <Image size={15} /> },
+  // Support
+  { id: 'priority-support', category: 'Support',    name: 'Priority Support',           description: 'Same-day response, monthly check-in call, proactive monitoring and updates.',                      oneTime: null, monthly: 20,  icon: <Shield size={15} /> },
 ];
 
-// ─── Preset Bundles ───────────────────────────────────────────────────────────
 const BUNDLES = [
   {
     name: 'Starter',
-    tagline: 'Perfect for brand-new small businesses',
-    color: 'bg-slate-100 border-slate-200',
+    tagline: 'CRM + basic site + booking',
+    color: 'bg-slate-50 border-slate-200',
     accent: 'text-slate-700',
-    ids: ['website-basic', 'addon-security'],
+    ids: ['crm', 'onboarding', 'website-basic', 'booking'],
   },
   {
-    name: 'Business',
-    tagline: 'Most popular — website + CRM + booking',
+    name: 'Growth',
+    tagline: 'Most popular — adds reminders, SEO & reviews',
     color: 'bg-orange-50 border-orange-200',
     accent: 'text-orange-600',
-    ids: ['website-full', 'crm-basic', 'booking', 'addon-sms'],
+    ids: ['crm', 'onboarding', 'website-basic', 'booking', 'reminders', 'seo', 'reviews'],
   },
   {
     name: 'Full Stack',
-    tagline: 'Everything — max automation & analytics',
-    color: 'bg-peach-50 border-orange-300',
-    accent: 'text-orange-700',
-    ids: ['website-full', 'crm-full', 'booking-staff', 'addon-sms', 'addon-chat', 'addon-mobile', 'addon-security'],
+    tagline: 'Everything — AI, marketing & priority support',
+    color: 'bg-amber-50 border-amber-300',
+    accent: 'text-amber-700',
+    ids: ['crm', 'onboarding', 'website-custom', 'booking', 'reminders', 'seo', 'ai-phone', 'ai-chat', 'ai-followup', 'reviews', 'email-sms', 'social', 'priority-support'],
   },
 ];
 
-const categories = [...new Set(SERVICES.map(s => s.category))];
+const CATEGORIES = [...new Set(SERVICES.map(s => s.category))];
 
 function fmt(n: number) {
-  return n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+  return '$' + n.toLocaleString('en-US');
+}
+
+function priceLine(svc: Service) {
+  const parts = [];
+  if (svc.oneTime) parts.push(fmt(svc.oneTime) + ' setup');
+  if (svc.monthly) parts.push(fmt(svc.monthly) + '/mo');
+  return parts.join(' + ');
 }
 
 export default function SuperQuote() {
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(new Set(['crm']));
   const [clientName, setClientName] = useState('');
   const [notes, setNotes] = useState('');
 
-  const toggle = (id: string) => {
+  const toggle = (id: string, required?: boolean) => {
+    if (required) return;
     setSelected(prev => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
@@ -80,23 +89,27 @@ export default function SuperQuote() {
   const applyBundle = (ids: string[]) => setSelected(new Set(ids));
 
   const selectedServices = SERVICES.filter(s => selected.has(s.id));
-  const totalOneTime = selectedServices.reduce((sum, s) => sum + s.oneTime, 0);
+  const totalOneTime = selectedServices.reduce((sum, s) => sum + (s.oneTime ?? 0), 0);
   const totalMonthly = selectedServices.reduce((sum, s) => sum + (s.monthly ?? 0), 0);
 
   const handleCopy = () => {
     const lines = [
       clientName ? 'Quote for: ' + clientName : 'Peach Stack — Project Quote',
+      '='.repeat(50),
       '',
-      'ONE-TIME BUILD FEES',
-      ...selectedServices.map(s => '  ' + s.name.padEnd(40) + fmt(s.oneTime)),
+      'SERVICES INCLUDED',
+      ...selectedServices.map(s => {
+        const price = priceLine(s);
+        return '  • ' + s.name + (price ? ' — ' + price : '');
+      }),
       '',
-      'MONTHLY RETAINER (per service)',
-      ...selectedServices.filter(s => s.monthly).map(s => '  ' + s.name.padEnd(40) + fmt(s.monthly!) + '/mo'),
+      '─'.repeat(50),
+      'TOTAL SETUP:    ' + fmt(totalOneTime),
+      'TOTAL MONTHLY:  ' + fmt(totalMonthly) + '/mo',
       '',
-      'TOTAL ONE-TIME:  ' + fmt(totalOneTime),
-      'TOTAL MONTHLY:   ' + fmt(totalMonthly) + '/mo',
+      notes ? 'Notes:\n' + notes : '',
       '',
-      notes ? 'Notes: ' + notes : '',
+      'Built by Peach Stack · peachstack.dev',
     ].filter(l => l !== undefined);
     navigator.clipboard.writeText(lines.join('\n'));
     alert('Quote copied to clipboard!');
@@ -109,11 +122,11 @@ export default function SuperQuote() {
         {/* Header */}
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Quote Builder</h1>
-          <p className="text-slate-500 text-sm mt-1">Select services to build a client proposal. Prices are one-time build + optional monthly retainer per service.</p>
+          <p className="text-slate-500 text-sm mt-1">Check services to build a client proposal. The CRM is always included.</p>
         </div>
 
         {/* Client Name */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-6">
+        <div className="bg-white rounded-2xl border border-slate-200 p-5">
           <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Client Name (optional)</label>
           <input
             value={clientName}
@@ -125,52 +138,60 @@ export default function SuperQuote() {
 
         {/* Preset Bundles */}
         <div>
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Preset Bundles — click to auto-select</p>
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Quick Bundles</p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {BUNDLES.map(b => (
-              <button
-                key={b.name}
-                onClick={() => applyBundle(b.ids)}
-                className={"text-left p-5 rounded-2xl border-2 transition-all hover:scale-[1.02] " + b.color}
-              >
-                <div className={"font-bold text-base " + b.accent}>{b.name}</div>
-                <div className="text-xs text-slate-500 mt-1">{b.tagline}</div>
-                <div className="text-xs text-slate-400 mt-2">{b.ids.length} services included</div>
-              </button>
-            ))}
+            {BUNDLES.map(b => {
+              const svcs = SERVICES.filter(s => b.ids.includes(s.id));
+              const ot = svcs.reduce((sum, s) => sum + (s.oneTime ?? 0), 0);
+              const mo = svcs.reduce((sum, s) => sum + (s.monthly ?? 0), 0);
+              return (
+                <button
+                  key={b.name}
+                  onClick={() => applyBundle(b.ids)}
+                  className={"text-left p-5 rounded-2xl border-2 transition-all hover:scale-[1.01] active:scale-100 " + b.color}
+                >
+                  <div className={"font-bold text-base " + b.accent}>{b.name}</div>
+                  <div className="text-xs text-slate-500 mt-1 mb-3">{b.tagline}</div>
+                  <div className="text-sm font-bold text-slate-800">{fmt(ot)} setup</div>
+                  <div className="text-xs text-slate-500">{fmt(mo)}/mo</div>
+                </button>
+              );
+            })}
           </div>
         </div>
 
         {/* Service Checklist */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6">
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Or build manually — check each service</p>
-          {categories.map(cat => (
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-7">
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider -mb-2">Or build manually</p>
+          {CATEGORIES.map(cat => (
             <div key={cat}>
-              <h3 className="text-sm font-bold text-slate-700 mb-3 pb-2 border-b border-slate-100">{cat}</h3>
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 pb-2 border-b border-slate-100">{cat}</h3>
               <div className="space-y-2">
                 {SERVICES.filter(s => s.category === cat).map(svc => {
                   const on = selected.has(svc.id);
                   return (
                     <label
                       key={svc.id}
-                      className={"flex items-start gap-3 p-3 rounded-xl cursor-pointer transition-colors " + (on ? 'bg-orange-50 border border-orange-200' : 'hover:bg-slate-50 border border-transparent')}
+                      className={"flex items-start gap-3 p-3 rounded-xl transition-colors " + (svc.required ? 'bg-orange-50 border border-orange-200 cursor-default' : 'cursor-pointer ' + (on ? 'bg-orange-50 border border-orange-200' : 'hover:bg-slate-50 border border-transparent'))}
                     >
                       <input
                         type="checkbox"
                         checked={on}
-                        onChange={() => toggle(svc.id)}
+                        onChange={() => toggle(svc.id, svc.required)}
+                        disabled={svc.required}
                         className="mt-0.5 accent-orange-500"
                       />
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-orange-500">{svc.icon}</span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-orange-400">{svc.icon}</span>
                           <span className="font-semibold text-sm text-slate-800">{svc.name}</span>
+                          {svc.required && <span className="text-[10px] font-bold bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full">Required</span>}
                         </div>
-                        <p className="text-xs text-slate-400 mt-0.5">{svc.description}</p>
+                        <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">{svc.description}</p>
                       </div>
-                      <div className="text-right shrink-0">
-                        <div className="text-sm font-bold text-slate-800">{fmt(svc.oneTime)}</div>
-                        {svc.monthly && <div className="text-xs text-slate-400">+ {fmt(svc.monthly)}/mo</div>}
+                      <div className="text-right shrink-0 space-y-0.5">
+                        {svc.oneTime && <div className="text-sm font-bold text-slate-800">{fmt(svc.oneTime)} setup</div>}
+                        {svc.monthly && <div className="text-xs text-slate-500">{fmt(svc.monthly)}/mo</div>}
                       </div>
                     </label>
                   );
@@ -181,48 +202,52 @@ export default function SuperQuote() {
         </div>
 
         {/* Notes */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-6">
+        <div className="bg-white rounded-2xl border border-slate-200 p-5">
           <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Notes / Custom Items</label>
           <textarea
             value={notes}
             onChange={e => setNotes(e.target.value)}
-            placeholder="e.g. Rush delivery +$200, custom integrations, domain not included..."
+            placeholder="e.g. Rush fee, custom integrations, extra pages..."
             rows={3}
             className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 resize-none"
           />
         </div>
 
-        {/* Quote Summary */}
-        <div className="bg-white rounded-2xl border-2 border-orange-200 p-6 sticky bottom-6 shadow-xl shadow-orange-100">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Quote Summary</p>
+        {/* Quote Summary — sticky footer */}
+        <div className="bg-white rounded-2xl border-2 border-orange-200 p-6 shadow-xl shadow-orange-100/60 sticky bottom-4">
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                {clientName ? clientName + ' — Quote' : 'Quote Summary'}
+              </p>
               {selectedServices.length === 0 ? (
-                <p className="text-slate-400 text-sm">No services selected yet</p>
+                <p className="text-slate-400 text-sm">No services selected</p>
               ) : (
-                <div className="space-y-0.5">
+                <div className="space-y-1">
                   {selectedServices.map(s => (
                     <div key={s.id} className="flex items-center gap-2 text-sm text-slate-600">
-                      <Check size={13} className="text-orange-500 shrink-0" />
-                      <span>{s.name}</span>
-                      <span className="text-slate-400">— {fmt(s.oneTime)}{s.monthly ? ' + ' + fmt(s.monthly) + '/mo' : ''}</span>
+                      <Check size={12} className="text-orange-500 shrink-0" />
+                      <span className="truncate">{s.name}</span>
+                      <span className="text-slate-400 shrink-0 text-xs">— {priceLine(s)}</span>
                     </div>
                   ))}
                 </div>
               )}
             </div>
             <div className="text-right shrink-0">
-              <div className="text-3xl font-black text-slate-900">{fmt(totalOneTime)}</div>
-              <div className="text-sm text-slate-500">one-time build</div>
+              <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Total</div>
+              {totalOneTime > 0 && (
+                <div className="text-2xl font-black text-slate-900">{fmt(totalOneTime)} <span className="text-sm font-normal text-slate-400">setup</span></div>
+              )}
               {totalMonthly > 0 && (
-                <div className="text-lg font-bold text-orange-600 mt-1">+ {fmt(totalMonthly)}/mo retainer</div>
+                <div className="text-xl font-bold text-orange-600">{fmt(totalMonthly)}<span className="text-sm font-normal text-slate-400">/mo</span></div>
               )}
               <button
                 onClick={handleCopy}
                 disabled={selectedServices.length === 0}
-                className="mt-3 flex items-center gap-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-40 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-colors"
+                className="mt-4 flex items-center gap-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-40 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-colors ml-auto"
               >
-                <FileText size={15} /> Copy Quote
+                <FileText size={14} /> Copy Quote
               </button>
             </div>
           </div>
