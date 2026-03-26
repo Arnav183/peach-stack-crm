@@ -2,15 +2,97 @@ import { useState, useEffect, useRef } from "react";
 import { Plus, Trash2, Pencil, Upload, Download, X, Check, AlertCircle } from "lucide-react";
 import * as XLSX from "xlsx";
 
-const CATEGORIES = ["Supplies", "Rent", "Software", "Payroll", "Marketing", "Equipment", "Utilities", "Other"];
-
-const TEMPLATE_ROWS = [
-  { date: "2025-03-01", category: "Supplies", amount: 45.50, note: "Threading thread and wax" },
-  { date: "2025-03-05", category: "Rent", amount: 1200, note: "March studio rent" },
-  { date: "2025-03-10", category: "Software", amount: 29.99, note: "Booking app subscription" },
+const CATEGORIES = [
+  "Supplies", "Inventory / Stock", "Rent", "Utilities",
+  "Software / Subscriptions", "Payroll / Wages", "Contractor / Freelancer",
+  "Marketing / Advertising", "Equipment", "Insurance",
+  "Professional Services", "Repairs & Maintenance", "Travel",
+  "Meals & Entertainment", "Training / Education", "Other"
 ];
 
-export default function Expenses() {
+const INDUSTRY_EXPENSE_TEMPLATES: Record<string, any[]> = {
+  beauty: [
+    { date: "2026-03-01", category: "Supplies", amount: 145, note: "Threading thread, cotton, brow tints" },
+    { date: "2026-03-01", category: "Supplies", amount: 95, note: "Lash lift kits x3" },
+    { date: "2026-03-05", category: "Software / Subscriptions", amount: 149, note: "Peach Stack platform fee" },
+    { date: "2026-03-10", category: "Rent", amount: 1200, note: "Studio rent - March" },
+    { date: "2026-03-12", category: "Marketing / Advertising", amount: 75, note: "Instagram ads" },
+    { date: "2026-03-15", category: "Equipment", amount: 340, note: "New LED mirror" },
+    { date: "2026-03-20", category: "Insurance", amount: 85, note: "Monthly liability insurance" },
+    { date: "2026-03-25", category: "Utilities", amount: 120, note: "Electric + water" },
+  ],
+  auto: [
+    { date: "2026-03-01", category: "Inventory / Stock", amount: 890, note: "Brake pads, rotors, oil filters" },
+    { date: "2026-03-01", category: "Supplies", amount: 220, note: "Shop rags, gloves, cleaning" },
+    { date: "2026-03-05", category: "Software / Subscriptions", amount: 199, note: "Peach Stack platform fee" },
+    { date: "2026-03-10", category: "Rent", amount: 2200, note: "Shop rent - March" },
+    { date: "2026-03-12", category: "Utilities", amount: 380, note: "Electric + water + air" },
+    { date: "2026-03-15", category: "Equipment", amount: 1200, note: "Tire mounting machine" },
+    { date: "2026-03-18", category: "Insurance", amount: 250, note: "Business + liability" },
+    { date: "2026-03-22", category: "Contractor / Freelancer", amount: 400, note: "Part-time mechanic" },
+  ],
+  restaurant: [
+    { date: "2026-03-01", category: "Inventory / Stock", amount: 2800, note: "Monthly produce, protein, dry goods" },
+    { date: "2026-03-01", category: "Supplies", amount: 180, note: "Napkins, packaging, cleaning" },
+    { date: "2026-03-05", category: "Software / Subscriptions", amount: 299, note: "Peach Stack platform fee" },
+    { date: "2026-03-10", category: "Rent", amount: 4500, note: "Restaurant space rent - March" },
+    { date: "2026-03-12", category: "Utilities", amount: 620, note: "Electric + gas + water" },
+    { date: "2026-03-15", category: "Payroll / Wages", amount: 6800, note: "Staff wages - March" },
+    { date: "2026-03-18", category: "Insurance", amount: 320, note: "Restaurant liability + property" },
+    { date: "2026-03-22", category: "Repairs & Maintenance", amount: 250, note: "Dishwasher repair" },
+  ],
+  medical: [
+    { date: "2026-03-01", category: "Supplies", amount: 380, note: "Medical consumables + PPE" },
+    { date: "2026-03-05", category: "Software / Subscriptions", amount: 199, note: "Peach Stack + EHR software" },
+    { date: "2026-03-10", category: "Rent", amount: 3500, note: "Office rent - March" },
+    { date: "2026-03-15", category: "Payroll / Wages", amount: 5500, note: "Staff + admin wages" },
+    { date: "2026-03-18", category: "Insurance", amount: 450, note: "Malpractice + liability" },
+    { date: "2026-03-22", category: "Professional Services", amount: 200, note: "Accounting - monthly" },
+    { date: "2026-03-25", category: "Training / Education", amount: 120, note: "CPD certification" },
+  ],
+  retail: [
+    { date: "2026-03-01", category: "Inventory / Stock", amount: 2200, note: "Monthly product restock" },
+    { date: "2026-03-05", category: "Software / Subscriptions", amount: 99, note: "Peach Stack + POS" },
+    { date: "2026-03-10", category: "Rent", amount: 2800, note: "Store rent - March" },
+    { date: "2026-03-15", category: "Payroll / Wages", amount: 3200, note: "Staff wages" },
+    { date: "2026-03-18", category: "Marketing / Advertising", amount: 180, note: "Instagram + Google Shopping" },
+    { date: "2026-03-22", category: "Supplies", amount: 95, note: "Bags, tissue, packaging" },
+    { date: "2026-03-25", category: "Insurance", amount: 120, note: "Business insurance" },
+  ],
+  fitness: [
+    { date: "2026-03-01", category: "Equipment", amount: 650, note: "Bands, mats, weights" },
+    { date: "2026-03-05", category: "Software / Subscriptions", amount: 149, note: "Peach Stack + booking app" },
+    { date: "2026-03-10", category: "Rent", amount: 2200, note: "Studio rent - March" },
+    { date: "2026-03-12", category: "Utilities", amount: 280, note: "Electric + internet + music license" },
+    { date: "2026-03-15", category: "Contractor / Freelancer", amount: 800, note: "Part-time instructor" },
+    { date: "2026-03-18", category: "Insurance", amount: 150, note: "Studio liability" },
+    { date: "2026-03-25", category: "Repairs & Maintenance", amount: 180, note: "Treadmill service" },
+  ],
+  agency: [
+    { date: "2026-03-01", category: "Software / Subscriptions", amount: 350, note: "Figma, Adobe CC, hosting" },
+    { date: "2026-03-05", category: "Software / Subscriptions", amount: 199, note: "Peach Stack platform fee" },
+    { date: "2026-03-08", category: "Contractor / Freelancer", amount: 1200, note: "Subcontractor - dev work" },
+    { date: "2026-03-10", category: "Marketing / Advertising", amount: 200, note: "LinkedIn ads" },
+    { date: "2026-03-12", category: "Professional Services", amount: 300, note: "Accountant quarterly" },
+    { date: "2026-03-15", category: "Travel", amount: 85, note: "Client meeting - fuel + parking" },
+    { date: "2026-03-18", category: "Meals & Entertainment", amount: 120, note: "Client lunch" },
+    { date: "2026-03-22", category: "Training / Education", amount: 199, note: "Online course" },
+  ],
+  general: [
+    { date: "2026-03-01", category: "Supplies", amount: 180, note: "Monthly supplies" },
+    { date: "2026-03-05", category: "Software / Subscriptions", amount: 149, note: "Peach Stack platform fee" },
+    { date: "2026-03-10", category: "Rent", amount: 1500, note: "Business space rent - March" },
+    { date: "2026-03-12", category: "Utilities", amount: 220, note: "Electric + internet" },
+    { date: "2026-03-15", category: "Payroll / Wages", amount: 2800, note: "Staff wages" },
+    { date: "2026-03-18", category: "Marketing / Advertising", amount: 100, note: "Online advertising" },
+    { date: "2026-03-22", category: "Insurance", amount: 130, note: "Business insurance" },
+    { date: "2026-03-25", category: "Equipment", amount: 250, note: "Tools / equipment purchase" },
+  ],
+};
+
+const TEMPLATE_ROWS = INDUSTRY_EXPENSE_TEMPLATES["general"];
+
+export default function Expensesexport default function Expenses({ user }: { user?: any }) {
   const [expenses, setExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -76,10 +158,28 @@ export default function Expenses() {
   };
 
   const downloadTemplate = () => {
-    const ws = XLSX.utils.json_to_sheet(TEMPLATE_ROWS);
+    const industry = user?.industry || "general";
+    const rows = INDUSTRY_EXPENSE_TEMPLATES[industry] || INDUSTRY_EXPENSE_TEMPLATES["general"];
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws["!cols"] = [{ wch: 14 }, { wch: 28 }, { wch: 10 }, { wch: 40 }];
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Expenses");
-    XLSX.writeFile(wb, "expenses_template.xlsx");
+    XLSX.utils.book_append_sheet(wb, ws, "Expenses Import");
+    // Column guide sheet
+    const guide = [
+      { column: "date", format: "YYYY-MM-DD", example: "2026-03-15", required: "Yes" },
+      { column: "category", format: "Must match a category exactly", example: "Rent", required: "Yes" },
+      { column: "amount", format: "Number (no $ sign)", example: "1200", required: "Yes" },
+      { column: "note", format: "Free text description", example: "Studio rent March", required: "No" },
+    ];
+    const ws2 = XLSX.utils.json_to_sheet(guide);
+    ws2["!cols"] = [{ wch: 12 }, { wch: 30 }, { wch: 20 }, { wch: 10 }];
+    XLSX.utils.book_append_sheet(wb, ws2, "Column Guide");
+    // Categories reference sheet
+    const catRef = CATEGORIES.map(c => ({ category: c }));
+    const ws3 = XLSX.utils.json_to_sheet(catRef);
+    ws3["!cols"] = [{ wch: 28 }];
+    XLSX.utils.book_append_sheet(wb, ws3, "Valid Categories");
+    XLSX.writeFile(wb, "expenses_import_template.xlsx");
   };
 
   const totalByCategory = CATEGORIES.map(cat => ({
