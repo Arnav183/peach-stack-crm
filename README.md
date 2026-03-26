@@ -1,22 +1,18 @@
-# BizCRM — Peach Stack
+# Peach Stack CRM
 
-A full-stack small business CRM built by **Peach Stack**.
+A multi-tenant business management platform built and operated by **Peach Stack**.
 
-Peach Stack is a dev shop and training program based in Atlanta, GA.
-We build real software for small businesses and train junior developers by doing it.
+Peach Stack is a dev shop and training program based in Atlanta, GA. We build real production software for small businesses across multiple industries.
 
 ---
 
-## What It Does
+## What It Is
 
-A clean, fast internal tool for small businesses to manage clients,
-track appointments, and monitor revenue — all in one place.
+A full-stack SaaS CRM platform that powers client-facing business dashboards for small businesses. Each business gets their own isolated environment with a dashboard tailored to their industry.
 
-- **Dashboard** — total clients, revenue, upcoming appointments, new clients this month
-- **Clients** — searchable list with VIP / Regular / New / At Risk / Inactive status badges, detail pages with notes and appointment history
-- **Appointments** — view and manage upcoming and past appointments with status tracking
-- **Revenue** — monthly revenue chart + breakdown by service type
-- **Settings** — update business name and owner info
+Supported industries: Hair & Beauty, Auto Shop, Restaurant & Cafe, Dental & Medical, Retail, Fitness & Gym, Freelancer & Agency, General Service.
+
+---
 
 ## Tech Stack
 
@@ -24,72 +20,64 @@ track appointments, and monitor revenue — all in one place.
 |---|---|
 | Frontend | React 19, TypeScript, Tailwind CSS, Recharts |
 | Backend | Node.js, Express, better-sqlite3 (SQLite) |
-| Auth | JWT (httpOnly cookie), bcrypt |
+| Auth | JWT (httpOnly cookie), bcrypt (cost 12) |
 | Build | Vite 6 |
 | Deploy | Railway |
 
-## Getting Started
+---
+
+## Architecture
+
+- **Multi-tenant** — each business has fully isolated data, scoped at the database query level
+- **3-tier access** — platform admin, business admin, customer portal
+- **Rate limiting** — login endpoint protected against brute force
+- **Security headers** — X-Frame-Options, X-Content-Type-Options, X-Robots-Tag, Referrer-Policy
+- **Health check** — dedicated `/health` endpoint for Railway deployment monitoring
+
+---
+
+## Local Development
 
 ```bash
 npm install
+```
+
+Copy `.env.example` to `.env` and fill in the required variables:
+
+```
+JWT_SECRET=          # Required — any long random string
+SUPERADMIN_EMAIL=    # Required — platform admin login
+SUPERADMIN_PASSWORD= # Required — platform admin password
+```
+
+```bash
 npm run dev
 ```
 
-App runs at `http://localhost:3000`
+---
 
-**Demo login**
-```
-Email:    admin@example.com
-Password: admin123
-```
+## Deployment
 
-## Seed the Database
+Deployed on Railway with persistent SQLite storage.
 
-```bash
-npx tsx seed.ts
-```
-
-Populates 20 realistic clients with varied join dates (Sept 2024 — Mar 2025),
-5 status types, and 40 appointments spread across 6 months.
-Only runs if the database is empty.
-
-## Environment Variables
-
-Copy `.env.example` to `.env`:
+Required environment variables (set in Railway dashboard):
 
 ```
-JWT_SECRET=your-secret-key-here
+JWT_SECRET
+SUPERADMIN_EMAIL
+SUPERADMIN_PASSWORD
+NODE_ENV=production
 ```
 
-## Project Structure
+Set `RESET_DB=true` to wipe and re-seed the database on next deploy. Remove it after the first boot.
 
-```
-├── server.ts               Express API + Vite dev middleware
-├── seed.ts                 Database seed script
-├── crm.db                  SQLite database (auto-created on first run)
-├── src/
-│   ├── App.tsx             Root component + auth state
-│   ├── components/
-│   │   └── Sidebar.tsx
-│   └── pages/
-│       ├── Login.tsx
-│       ├── Dashboard.tsx
-│       ├── Clients.tsx
-│       ├── ClientDetail.tsx
-│       ├── Appointments.tsx
-│       ├── Revenue.tsx
-│       └── Settings.tsx
-```
+---
 
-## Deploying
+## Access
 
-This app uses a persistent Express server + SQLite — it cannot run on Vercel.
-Deploy to **Railway** (free tier) for a full working deployment:
+This platform is operated by Peach Stack. Access is provisioned by the Peach Stack team.
 
-1. Connect this repo on railway.app
-2. Set start command: `npm run dev`
-3. Add env var: `JWT_SECRET=your-secret`
-4. Deploy — Railway gives you a public URL instantly
+For business inquiries: [peachstack.dev](https://peachstack.dev)
 
 ---
 
