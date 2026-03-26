@@ -214,8 +214,8 @@ export default function SuperQuote() {
                               <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{svc.desc}</p>
                             </div>
                             <div className="text-right shrink-0">
-                              {svc.one_time > 0 && <p className="text-xs font-bold text-slate-700">${svc.one_time} <span className="font-normal text-slate-400">setup</span></p>}
-                              {svc.monthly > 0 && <p className="text-xs font-bold text-slate-700">${svc.monthly}<span className="font-normal text-slate-400">/mo</span></p>}
+                              {svc.one_time > 0 && <p className="text-xs font-bold text-slate-700">{"$"}{svc.one_time} <span className="font-normal text-slate-400">setup</span></p>}
+                              {svc.monthly > 0 && <p className="text-xs font-bold text-slate-700">{"$"}{svc.monthly}<span className="font-normal text-slate-400">/mo</span></p>}
                               {svc.one_time === 0 && svc.monthly === 0 && <p className="text-xs text-slate-400">Free</p>}
                             </div>
                           </div>
@@ -255,9 +255,9 @@ export default function SuperQuote() {
                   <div key={s.id} className="flex items-center justify-between text-xs">
                     <span className="text-slate-600 truncate pr-2">{s.name}</span>
                     <span className="text-slate-500 shrink-0">
-                      {s.one_time > 0 && <span className="font-medium">${s.one_time}</span>}
+                      {s.one_time > 0 && <span className="font-medium">{"$"}{s.one_time}</span>}
                       {s.one_time > 0 && s.monthly > 0 && <span className="text-slate-300 mx-1">+</span>}
-                      {s.monthly > 0 && <span>${s.monthly}/mo</span>}
+                      {s.monthly > 0 && <span>{"$"}{s.monthly}/mo</span>}
                       {s.one_time === 0 && s.monthly === 0 && <span className="text-slate-400">Free</span>}
                     </span>
                   </div>
@@ -282,17 +282,17 @@ export default function SuperQuote() {
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-slate-600">One-time fee</span>
                   <div className="text-right">
-                    {discount > 0 && <p className="text-xs text-slate-400 line-through">${oneTimeTotal}</p>}
-                    <p className="text-base font-bold text-slate-900">${oneTimeAfterDiscount}</p>
+                    {discount > 0 && <p className="text-xs text-slate-400 line-through">{"$"}{oneTimeTotal}</p>}
+                    <p className="text-base font-bold text-slate-900">{"$"}{oneTimeAfterDiscount}</p>
                   </div>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-slate-600">Monthly retainer</span>
-                  <p className="text-base font-bold text-orange-500">${monthlyTotal}<span className="text-xs font-normal text-slate-400">/mo</span></p>
+                  <p className="text-base font-bold text-orange-500">{"$"}{monthlyTotal}<span className="text-xs font-normal text-slate-400">/mo</span></p>
                 </div>
                 <div className="h-px bg-slate-200 my-1" />
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  Year 1 total: <span className="font-semibold text-slate-600">${(oneTimeAfterDiscount + monthlyTotal * 12).toLocaleString()}</span>
+                  Year 1 total: <span className="font-semibold text-slate-600">{"$"}{(oneTimeAfterDiscount + monthlyTotal * 12).toLocaleString()}</span>
                 </p>
               </div>
 
