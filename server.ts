@@ -12,9 +12,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // SECURITY: JWT secret must be set via env var in production — no insecure fallback
-const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === "production"
-  ? (() => { throw new Error("JWT_SECRET env var is required in production"); })()
-  : "dev-only-secret-change-in-prod");
+if (!process.env.JWT_SECRET) {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("FATAL: JWT_SECRET environment variable is not set. Set it in Railway variables.");
+  }
+  console.warn("WARNING: JWT_SECRET not set. Using insecure default for development only.");
+}
+const JWT_SECRET = process.env.JWT_SECRET || "dev-local-only-not-for-production";
 
 const PORT = process.env.PORT || 8080;
 const DB_PATH = path.join(process.cwd(), "crm.db");
@@ -141,6 +145,11 @@ for (const m of migrations) { try { db.exec(m); } catch(e) {} }
 
 async function startServer() {
   const app = express();
+  // Health check endpoint — must respond immediately for Railway
+  app.get("/health", (_req, res) => {
+    res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
   app.use(express.json({ limit: "10mb" }));
   app.use(cookieParser());
 
@@ -149,6 +158,8 @@ async function startServer() {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "DENY");
     res.setHeader("X-XSS-Protection", "1; mode=block");
+    res.setHeader("X-Robots-Tag", "noindex, nofollow");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
     next();
   });
 
