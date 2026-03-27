@@ -10,6 +10,7 @@ import SuperSidebar from "./components/SuperSidebar";
 import SuperDashboard from "./pages/super/SuperDashboard";
 import SuperBusinesses from "./pages/super/SuperBusinesses";
 import SuperQuote from "./pages/super/SuperQuote";
+import SuperBusinessDetail from "./pages/super/SuperBusinessDetail";
 
 // Business pages
 import BusinessSidebar from "./components/BusinessSidebar";
@@ -79,6 +80,7 @@ export default function App() {
                 <Routes>
                   <Route path="/dashboard" element={<SuperDashboard />} />
                   <Route path="/businesses" element={<SuperBusinesses />} />
+                  <Route path="/businesses/:id" element={<SuperBusinessDetail />} />
                 <Route path="/quote" element={<SuperQuote />} />
                   <Route path="*" element={<Navigate to="/super/dashboard" />} />
                 </Routes>
