@@ -540,7 +540,7 @@ async function startServer() {
 // ── Plan & Invoice routes ─────────────────────────────────────────────────────
 
 // Update a business plan_services and recalculate mrr
-app.put('/api/super/businesses/:id/plan', requireSuperAdmin, (req, res) => {
+app.put('/api/super/businesses/:id/plan', auth, superadminOnly, (req, res) => {
   const { plan_services } = req.body; // array of service IDs
   if (!Array.isArray(plan_services)) return res.status(400).json({ error: 'plan_services must be an array' });
 
@@ -550,7 +550,7 @@ app.put('/api/super/businesses/:id/plan', requireSuperAdmin, (req, res) => {
     'booking': 10, 'reminders': 10, 'ai-phone': 35, 'ai-chat': 15,
     'ai-followup': 15, 'reviews': 12, 'email-sms': 15, 'priority-support': 20,
   };
-  const mrr = plan_services.reduce((sum: number, id: string) => sum + (MONTHLY[id] ?? 0), 0);
+  const mrr = plan_services.reduce((sum: any, id: any) => sum + (MONTHLY[id] || 0), 0);
 
   db.run(
     'UPDATE businesses SET plan_services = ?, mrr = ? WHERE id = ?',
@@ -563,7 +563,7 @@ app.put('/api/super/businesses/:id/plan', requireSuperAdmin, (req, res) => {
 });
 
 // Get invoices for a business (last 3 months + next 3 months)
-app.get('/api/super/businesses/:id/invoices', requireSuperAdmin, (req, res) => {
+app.get('/api/super/businesses/:id/invoices', auth, superadminOnly, (req, res) => {
   const bizId = parseInt(req.params.id);
   db.get('SELECT name, mrr, plan_services FROM businesses WHERE id = ?', [bizId], (err, biz: any) => {
     if (err || !biz) return res.status(404).json({ error: 'Business not found' });
