@@ -55,6 +55,22 @@ if (!existsSync(DB_PATH)) {
   catch (e) { console.error("Seed failed:", e); }
 }
 
+// ── Always sync credentials on every boot ────────────────────────────────────
+// This runs regardless of whether DB existed, ensuring passwords always match env vars
+setTimeout(() => {
+  try {
+    const _adminEmail = process.env.SUPERADMIN_EMAIL || 'admin@peachstack.dev';
+    const _adminPass  = process.env.SUPERADMIN_PASSWORD || 'PeachStack$105';
+    const _adminHash  = bcrypt.hashSync(_adminPass, 10);
+    const _demoHash   = bcrypt.hashSync('demo1234', 10);
+    db.run("UPDATE users SET password=?, email=? WHERE role='superadmin'", [_adminHash, _adminEmail]);
+    db.run("UPDATE users SET password=? WHERE email='priya@luxethreading.com'", [_demoHash]);
+    db.run("UPDATE users SET password=? WHERE email='marcus@metroauto.com'", [_demoHash]);
+    db.run("UPDATE users SET password=? WHERE email='amara@peachtreebites.com'", [_demoHash]);
+    console.log('Credentials synced for', _adminEmail, 'and demo accounts');
+  } catch(e) { console.error('Credential sync failed:', e); }
+}, 2000); // 2s delay to ensure DB is ready
+
 const db = new Database(DB_PATH);
 db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
