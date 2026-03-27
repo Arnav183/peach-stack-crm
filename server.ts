@@ -612,7 +612,6 @@ app.get('/api/super/businesses/:id/invoices', auth, superadminOnly, (req, res) =
 
 // TEMP: one-time password reset — remove after use
 app.post('/api/reset-credentials-temp-8x92', (req, res) => {
-  const bcrypt = require('bcryptjs');
   const adminHash = bcrypt.hashSync('PeachStack$105', 10);
   const demoHash  = bcrypt.hashSync('demo1234', 10);
   db.run("UPDATE users SET password=? WHERE email='admin@peachstack.dev'", [adminHash]);
