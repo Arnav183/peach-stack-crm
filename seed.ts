@@ -16,6 +16,7 @@ db.exec(`
     owner_name TEXT, owner_email TEXT, phone TEXT, address TEXT,
     plan TEXT DEFAULT 'starter', mrr REAL DEFAULT 0, status TEXT DEFAULT 'active',
     settings TEXT DEFAULT '{}',
+    plan_services TEXT DEFAULT '[]',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP, last_login DATETIME
   );
   CREATE TABLE IF NOT EXISTS users (
