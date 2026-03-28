@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Search, Plus, MoreHorizontal, Eye, Edit2, Trash2, X, KeyRound, ShieldOff, Users } from "lucide-react";
+import { Search, Plus, MoreHorizontal, Eye, Edit2, Trash2, X, KeyRound, ShieldOff, Users, Upload, Download, Check, AlertCircle } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import * as XLSX from "xlsx";
 
 const STATUS_COLORS: any = {
   Active: "bg-emerald-100 text-emerald-800",
@@ -24,13 +25,26 @@ export default function Clients() {
   const [editingClient, setEditingClient] = useState<any>(null);
   const [activeMenu, setActiveMenu] = useState<number | null>(null);
   const [page, setPage] = useState(1);
+  const [importResult, setImportResult] = useState<{ success?: string; error?: string } | null>(null);
+  const [planServices, setPlanServices] = useState<string[]>([]);
   const PER_PAGE = 15;
   const menuRef = useRef<HTMLDivElement>(null);
+  const hasCRM = planServices.includes("crm");
 
   const load = () => {
     fetch("/api/clients").then(r => r.json()).then(setClients).finally(() => setLoading(false));
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    fetch("/api/business/profile").then(r => r.json()).then((d) => {
+      try {
+        const parsed = JSON.parse(d.plan_services || "[]");
+        setPlanServices(Array.isArray(parsed) ? parsed : []);
+      } catch {
+        setPlanServices([]);
+      }
+    }).catch(() => setPlanServices([]));
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -93,6 +107,61 @@ export default function Clients() {
 
   const inp = "w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition-all text-sm";
 
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportResult(null);
+    try {
+      const data = await file.arrayBuffer();
+      const wb = XLSX.read(data);
+      if (!wb.SheetNames?.length) throw new Error("Invalid file format or empty spreadsheet");
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows: any[] = XLSX.utils.sheet_to_json(ws);
+      const mapped = rows.map((r) => ({
+        name: r.name || r.Name || "",
+        email: r.email || r.Email || "",
+        phone: r.phone || r.Phone || "",
+        notes: r.notes || r.Notes || "",
+        status: r.status || r.Status || "New",
+      }));
+      const res = await fetch("/api/clients/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows: mapped }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Import failed");
+      setImportResult({ success: `Imported ${result.imported} clients.` });
+      load();
+    } catch (error) {
+      console.error("Clients import failed:", error);
+      setImportResult({ error: "Import failed. Download the template and keep the same column headers." });
+    }
+    e.target.value = "";
+  };
+
+  const downloadTemplate = () => {
+    const templateRows = [
+      { name: "Jane Doe", email: "jane@example.com", phone: "404-000-1111", status: "VIP", notes: "Returning client from website" },
+      { name: "Alex Rivera", email: "alex@example.com", phone: "404-000-2222", status: "New", notes: "Imported from booking list" },
+    ];
+    const guide = [
+      { column: "name", required: "Yes", notes: "Client full name" },
+      { column: "email", required: "No", notes: "Recommended for matching and portal access" },
+      { column: "phone", required: "No", notes: "Optional contact number" },
+      { column: "status", required: "No", notes: "Defaults to New" },
+      { column: "notes", required: "No", notes: "Optional free text" },
+    ];
+    const wb = XLSX.utils.book_new();
+    const ws1 = XLSX.utils.json_to_sheet(templateRows);
+    ws1["!cols"] = [{ wch: 20 }, { wch: 28 }, { wch: 16 }, { wch: 12 }, { wch: 40 }];
+    XLSX.utils.book_append_sheet(wb, ws1, "Clients Import");
+    const ws2 = XLSX.utils.json_to_sheet(guide);
+    ws2["!cols"] = [{ wch: 14 }, { wch: 10 }, { wch: 60 }];
+    XLSX.utils.book_append_sheet(wb, ws2, "Column Guide");
+    XLSX.writeFile(wb, "clients_import_template.xlsx");
+  };
+
   if (loading) return (
     <div className="flex items-center justify-center h-64">
       <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
@@ -103,16 +172,43 @@ export default function Clients() {
 
   return (
     <div className="space-y-6 p-8 min-h-screen bg-slate-50">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Clients</h1>
           <p className="text-slate-500 text-sm mt-0.5">{clients.length} total clients</p>
         </div>
-        <button onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-bold hover:bg-orange-400 transition-all shadow-lg shadow-orange-500/20">
-          <Plus className="w-4 h-4" /> Add Client
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={downloadTemplate} className="flex items-center gap-2 px-4 py-2.5 border border-slate-200 bg-white rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50">
+            <Download className="w-4 h-4" /> Template
+          </button>
+          {hasCRM ? (
+            <label className="flex items-center gap-2 px-4 py-2.5 border border-slate-200 bg-white rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 cursor-pointer">
+              <Upload className="w-4 h-4" /> Import
+              <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImport} />
+            </label>
+          ) : (
+            <button disabled className="flex items-center gap-2 px-4 py-2.5 border border-slate-200 bg-slate-100 rounded-xl text-sm font-bold text-slate-400 cursor-not-allowed">
+              <Upload className="w-4 h-4" /> Import (CRM plan required)
+            </button>
+          )}
+          <button onClick={() => setIsModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-bold hover:bg-orange-400 transition-all shadow-lg shadow-orange-500/20">
+            <Plus className="w-4 h-4" /> Add Client
+          </button>
+        </div>
       </div>
+      {importResult && (
+        <div className={`flex items-center gap-3 p-4 rounded-xl border text-sm font-medium ${importResult.success ? "bg-green-50 border-green-200 text-green-700" : "bg-red-50 border-red-200 text-red-700"}`}>
+          {importResult.success ? <Check className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+          {importResult.success || importResult.error}
+          <button onClick={() => setImportResult(null)} className="ml-auto"><X className="w-4 h-4" /></button>
+        </div>
+      )}
+      {!hasCRM && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800">
+          Client imports are unlocked when <strong>CRM Dashboard</strong> is included in this business plan.
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
