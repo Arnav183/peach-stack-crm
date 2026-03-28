@@ -212,7 +212,10 @@ export default function Revenue({ user }: { user?: any }) {
     expenses: (stats?.expensesByMonth?.find((e: any) => e.month === item.month)?.total) || 0,
   })).reverse() || [];
 
-  const serviceData = stats?.revenueByService || [];
+  const serviceData = (stats?.revenueByService || []).map((item: any) => ({
+    name: item.service || item.name || "Uncategorized",
+    value: Number(item.total ?? item.value ?? 0),
+  }));
   const expenseCatData = stats?.expensesByCategory || [];
   const COLORS = ["#f97316","#6366f1","#10b981","#f59e0b","#f43f5e","#8b5cf6","#ec4899","#14b8a6"];
 
