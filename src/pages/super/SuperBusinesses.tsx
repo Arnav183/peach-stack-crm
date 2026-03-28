@@ -16,6 +16,32 @@ const SERVICE_TAGS = [
   { id:"ai-chat",  label:"AI Chat Widget",   mrr:15 },
   { id:"priority-support",  label:"Priority Support", mrr:20 },
 ];
+const QUICK_BUNDLES = [
+  {
+    id: "starter",
+    name: "Starter",
+    description: "CRM + basic site + booking",
+    setup: 347,
+    monthly: 50,
+    services: ["crm", "website-basic", "booking"],
+  },
+  {
+    id: "growth",
+    name: "Growth",
+    description: "Most popular — adds reminders, SEO & reviews",
+    setup: 484,
+    monthly: 87,
+    services: ["crm", "website-basic", "booking", "reminders", "seo", "reviews"],
+  },
+  {
+    id: "full-stack",
+    name: "Full Stack",
+    description: "Everything — AI, marketing & priority support",
+    setup: 1139,
+    monthly: 197,
+    services: ["crm", "website-custom", "booking", "reminders", "seo", "ai-phone", "ai-chat", "ai-followup", "reviews", "email-sms", "priority-support"],
+  },
+];
 
 const INDUSTRY_COLORS: Record<string,string> = {
   beauty:"bg-orange-100 text-orange-700", auto:"bg-blue-100 text-blue-700",
@@ -55,6 +81,7 @@ export default function SuperBusinesses() {
   const emptyForm = { name:"", industry:"beauty", owner_name:"", owner_email:"", phone:"", mrr:"" };
   const [form, setForm] = useState(emptyForm);
   const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
+  const [selectedBundle, setSelectedBundle] = useState<string | null>(null);
 
   const load = () => fetch("/api/super/businesses").then(r=>r.json()).then(setBusinesses).finally(()=>setLoading(false));
   useEffect(()=>{load();},[]);
@@ -74,11 +101,18 @@ export default function SuperBusinesses() {
   };
 
   const toggleTag = (tag: typeof SERVICE_TAGS[0]) => {
+    setSelectedBundle(null);
     const next = new Set(activeTags);
     if (next.has(tag.id)) next.delete(tag.id); else next.add(tag.id);
     setActiveTags(next);
     const total = SERVICE_TAGS.filter(t => next.has(t.id)).reduce((s,t) => s + t.mrr, 0);
     setForm(f => ({ ...f, mrr: total > 0 ? String(total) : "" }));
+  };
+
+  const applyQuickBundle = (bundle: typeof QUICK_BUNDLES[number]) => {
+    setSelectedBundle(bundle.id);
+    setActiveTags(new Set(bundle.services));
+    setForm(f => ({ ...f, mrr: String(bundle.monthly) }));
   };
 
   const filtered = businesses.filter(b => {
@@ -164,7 +198,7 @@ export default function SuperBusinesses() {
           <button onClick={() => setShowPwVault(true)} className="flex items-center gap-2 px-4 py-2.5 border border-slate-200 bg-white text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-50">
             <Lock className="w-4 h-4" /> Temp Passwords
           </button>
-          <button onClick={()=>{setShowCreate(true);setCreateMsg(null);setForm(emptyForm);setActiveTags(new Set());}}
+          <button onClick={()=>{setShowCreate(true);setCreateMsg(null);setForm(emptyForm);setActiveTags(new Set());setSelectedBundle(null);}}
             className="flex items-center gap-2 px-4 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-bold hover:bg-orange-400 shadow-lg shadow-orange-500/20">
             <Plus className="w-4 h-4" />Add Business
           </button>
@@ -324,6 +358,21 @@ export default function SuperBusinesses() {
                   </div>
                   <div className="col-span-2">
                     <label className="block text-sm font-semibold text-slate-700 mb-2">Services <span className="text-slate-400 font-normal text-xs">(click to add to MRR)</span></label>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3">
+                      {QUICK_BUNDLES.map(bundle => (
+                        <button
+                          key={bundle.id}
+                          type="button"
+                          onClick={() => applyQuickBundle(bundle)}
+                          className={"rounded-xl border-2 p-3 text-left transition-all " + (selectedBundle === bundle.id ? "border-orange-500 bg-orange-50" : "border-slate-200 hover:border-orange-300")}
+                        >
+                          <p className="text-sm font-bold text-slate-900">{bundle.name}</p>
+                          <p className="text-xs text-slate-500 mt-0.5">{bundle.description}</p>
+                          <p className="text-xs text-slate-500 mt-1">{fmt(bundle.setup)} setup</p>
+                          <p className="text-sm font-bold text-orange-600">{fmt(bundle.monthly)}/mo</p>
+                        </button>
+                      ))}
+                    </div>
                     <div className="flex flex-wrap gap-2">
                       {SERVICE_TAGS.map(tag => (
                         <button key={tag.id} type="button" onClick={()=>toggleTag(tag)}
@@ -347,7 +396,7 @@ export default function SuperBusinesses() {
                   </div>
                   <div className="col-span-2">
                     <label className="block text-sm font-semibold text-slate-700 mb-1.5">Monthly Retainer ($)</label>
-                    <input type="number" step="1" min="0" placeholder="0" value={form.mrr} onChange={e=>setForm(f=>({...f,mrr:e.target.value}))} className={inp} />
+                    <input type="number" step="1" min="0" placeholder="0" value={form.mrr} onChange={e=>{setSelectedBundle(null);setForm(f=>({...f,mrr:e.target.value}));}} className={inp} />
                     <p className="text-xs text-slate-400 mt-1">Auto-calculated from services above, or enter manually.</p>
                   </div>
                 </div>
