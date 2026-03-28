@@ -23,6 +23,12 @@ const JWT_SECRET = process.env.JWT_SECRET || "dev-local-only-not-for-production"
 
 const PORT = Number(process.env.PORT || 8080);
 const DB_PATH = path.join(process.cwd(), "crm.db");
+const TEMP_PASSWORD_CHARS = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789!@#";
+const TEMP_PASSWORD_LENGTH = 12;
+
+function generateTempPassword() {
+  return Array.from({ length: TEMP_PASSWORD_LENGTH }, () => TEMP_PASSWORD_CHARS[Math.floor(Math.random() * TEMP_PASSWORD_CHARS.length)]).join("");
+}
 
 // Rate limiting store (in-memory, per IP)
 const loginAttempts = new Map<string, { count: number; resetAt: number }>();
@@ -278,7 +284,7 @@ async function startServer() {
     const { name, industry, owner_name, owner_email, phone, plan, mrr, plan_services } = req.body;
     if (!name || !owner_email || !industry) return res.status(400).json({ error: "name, industry, owner_email required" });
     if (db.prepare("SELECT id FROM users WHERE email=?").get(owner_email.toLowerCase())) return res.status(409).json({ error: "Email already in use" });
-    const tempPw = Array.from({length:12}, () => "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789!@#"[Math.floor(Math.random()*57)]).join("");
+    const tempPw = generateTempPassword();
     const services = Array.isArray(plan_services) && plan_services.length ? plan_services : ["crm"];
     const MONTHLY: Record<string, number> = {
       'crm': 25, 'website-basic': 15, 'website-custom': 25, 'seo': 15,
@@ -287,17 +293,20 @@ async function startServer() {
     };
     const calculatedMrr = services.reduce((sum: number, id: string) => sum + (MONTHLY[id] || 0), 0);
     const tx = db.transaction(() => {
-      const biz = db.prepare("INSERT INTO businesses (name,industry,owner_name,owner_email,phone,plan,mrr,plan_services,status) VALUES (?,?,?,?,?,?,?,?,?)").run(
+      const insertBusiness = db.prepare(
+        "INSERT INTO businesses (name,industry,owner_name,owner_email,phone,plan,mrr,plan_services,status) VALUES (@name,@industry,@owner_name,@owner_email,@phone,@plan,@mrr,@plan_services,@status)"
+      );
+      const biz = insertBusiness.run({
         name,
         industry,
-        owner_name||"",
-        owner_email.toLowerCase(),
-        phone||"",
-        plan||"starter",
-        Number(mrr) > 0 ? Number(mrr) : calculatedMrr,
-        JSON.stringify(services),
-        "active"
-      );
+        owner_name: owner_name || "",
+        owner_email: owner_email.toLowerCase(),
+        phone: phone || "",
+        plan: plan || "starter",
+        mrr: Number(mrr) > 0 ? Number(mrr) : calculatedMrr,
+        plan_services: JSON.stringify(services),
+        status: "active",
+      });
       db.prepare("INSERT INTO users (email,password,role,business_id,name,must_change_password) VALUES (?,?,'business_admin',?,?,1)").run(owner_email.toLowerCase(), bcrypt.hashSync(tempPw, 12), biz.lastInsertRowid, owner_name||"");
       return { id: biz.lastInsertRowid, tempPw };
     });
@@ -328,7 +337,7 @@ async function startServer() {
   });
 
   app.post("/api/super/businesses/:id/reset-password", auth, superadminOnly, (req, res) => {
-    const tempPw = Array.from({length:12}, () => "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789!@#"[Math.floor(Math.random()*57)]).join("");
+    const tempPw = generateTempPassword();
     db.prepare("UPDATE users SET password=?,must_change_password=1 WHERE business_id=? AND role='business_admin'").run(bcrypt.hashSync(tempPw, 12), req.params.id);
     res.json({ tempPassword: tempPw });
   });

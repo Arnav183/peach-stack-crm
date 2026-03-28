@@ -56,6 +56,7 @@ const BUNDLES = [
 
 const CATEGORIES = [...new Set(SERVICES.map(s => s.category))];
 const DEFAULT_SELECTION = new Set(['crm']);
+const MAX_QUOTE_FILENAME_LENGTH = 40;
 
 function fmt(n: number) {
   return '$' + n.toLocaleString('en-US');
@@ -138,12 +139,12 @@ export default function SuperQuote() {
       Description: notes || "",
       "Setup Fee (USD)": totalOneTime,
       "Monthly Fee (USD)": totalMonthly,
-    } as any);
-    const ws = XLSX.utils.json_to_sheet(rows, { header: ["#", "Category", "Service", "Description", "Setup Fee (USD)", "Monthly Fee (USD)"] });
+    });
+    const ws = XLSX.utils.json_to_sheet(rows);
     ws['!cols'] = [{ wch: 4 }, { wch: 14 }, { wch: 34 }, { wch: 56 }, { wch: 16 }, { wch: 16 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Quote");
-    const safeName = (clientName || "client").replace(/[^a-z0-9_-]/gi, "_").slice(0, 40);
+    const safeName = (clientName || "client").replace(/[^a-z0-9_-]/gi, "_").slice(0, MAX_QUOTE_FILENAME_LENGTH);
     XLSX.writeFile(wb, `peach-stack-quote-${safeName}.xlsx`);
   };
 

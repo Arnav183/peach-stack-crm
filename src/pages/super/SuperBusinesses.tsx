@@ -4,6 +4,7 @@ import { Plus, Search, MoreHorizontal, RefreshCw, Trash2, X, Eye, EyeOff, Copy, 
 import { format, parseISO } from "date-fns";
 
 const INDUSTRIES = ["beauty","auto","restaurant","medical","retail","fitness","agency","general"];
+const MAX_VAULT_ENTRIES = 50;
 const SERVICE_TAGS = [
   { id:"crm",      label:"CRM Dashboard",   mrr:25 },
   { id:"website-basic",  label:"Website",          mrr:15 },
@@ -47,6 +48,7 @@ export default function SuperBusinesses() {
   const [showPw, setShowPw] = useState(false);
   const [copiedPw, setCopiedPw] = useState(false);
   const [copiedReset, setCopiedReset] = useState(false);
+  const [copiedVault, setCopiedVault] = useState(false);
   const [showPwVault, setShowPwVault] = useState(false);
   const [pwVault, setPwVault] = useState<any[]>([]);
 
@@ -65,7 +67,7 @@ export default function SuperBusinesses() {
 
   const saveTempCredential = (entry: any) => {
     setPwVault(prev => {
-      const next = [entry, ...prev].slice(0, 50);
+      const next = [entry, ...prev].slice(0, MAX_VAULT_ENTRIES);
       localStorage.setItem("super_temp_password_vault", JSON.stringify(next));
       return next;
     });
@@ -88,7 +90,7 @@ export default function SuperBusinesses() {
   const totalMrr = filtered.reduce((s,b) => s + (b.mrr||0), 0);
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true); setCreateMsg(null);
-    const planServices = Array.from(new Set(["crm", ...Array.from(activeTags)]));
+    const planServices = Array.from(new Set(["crm", ...activeTags]));
     const res = await fetch("/api/super/businesses", {
       method: "POST", headers: {"Content-Type":"application/json"},
       body: JSON.stringify({ ...form, plan:"custom", mrr: parseFloat(form.mrr)||0, plan_services: planServices })
@@ -420,8 +422,8 @@ export default function SuperBusinesses() {
                         </div>
                         <div className="flex items-center gap-2 min-w-[220px]">
                           <p className="font-mono text-sm font-bold text-slate-800 flex-1">{entry.tempPassword}</p>
-                          <button onClick={()=>copy(entry.tempPassword, setCopiedReset)} className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500">
-                            <Copy className="w-3.5 h-3.5"/>
+                          <button onClick={()=>copy(entry.tempPassword, setCopiedVault)} className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500">
+                            {copiedVault ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500"/> : <Copy className="w-3.5 h-3.5"/>}
                           </button>
                         </div>
                       </div>

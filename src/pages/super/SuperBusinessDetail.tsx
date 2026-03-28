@@ -25,6 +25,7 @@ const SERVICES = [
 ];
 
 const CATEGORIES = [...new Set(SERVICES.map(s => s.category))];
+const DEFAULT_PLAN_SERVICES = ['crm'];
 const PLAN_PRESETS = [
   { name: "Starter", ids: ["crm", "onboarding", "website-basic", "booking"] },
   { name: "Growth", ids: ["crm", "onboarding", "website-basic", "booking", "reminders", "seo", "reviews"] },
@@ -58,7 +59,7 @@ export default function SuperBusinessDetail() {
   const [tab, setTab] = useState('overview');
 
   const [editing, setEditing] = useState(false);
-  const [draftServices, setDraftServices] = useState(new Set(['crm']));
+  const [draftServices, setDraftServices] = useState(new Set(DEFAULT_PLAN_SERVICES));
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
 
@@ -71,10 +72,10 @@ export default function SuperBusinessDetail() {
         setBiz(found);
         try {
           const parsed = JSON.parse(found.plan_services || '[]');
-          const services = Array.isArray(parsed) && parsed.length ? parsed : ['crm'];
+          const services = Array.isArray(parsed) && parsed.length ? parsed : DEFAULT_PLAN_SERVICES;
           setDraftServices(new Set(services));
         } catch(e) {
-          setDraftServices(new Set(['crm']));
+          setDraftServices(new Set(DEFAULT_PLAN_SERVICES));
         }
       } else {
         setBiz(null);
@@ -137,8 +138,8 @@ export default function SuperBusinessDetail() {
     );
   }
 
-  let currentServices = ['crm'];
-  try { currentServices = JSON.parse(biz.plan_services || '["crm"]'); } catch(e) {}
+  let currentServices = DEFAULT_PLAN_SERVICES;
+  try { currentServices = JSON.parse(biz.plan_services || JSON.stringify(DEFAULT_PLAN_SERVICES)); } catch(e) {}
 
   const activeServices = SERVICES.filter(s => currentServices.includes(s.id));
   const draftServiceList = SERVICES.filter(s => draftServices.has(s.id));
