@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Check, FileText, Globe, LayoutDashboard, Calendar, Bell, MessageSquare, BarChart2, Shield, Star, Mail, Image, RotateCcw } from 'lucide-react';
+import { Check, FileText, Globe, LayoutDashboard, Calendar, Bell, MessageSquare, BarChart2, Shield, Star, Mail, Image, RotateCcw, Send, Table } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 type Service = {
   id: string;
@@ -55,6 +56,7 @@ const BUNDLES = [
 
 const CATEGORIES = [...new Set(SERVICES.map(s => s.category))];
 const DEFAULT_SELECTION = new Set(['crm']);
+const MAX_QUOTE_FILENAME_LENGTH = 40;
 
 function fmt(n: number) {
   return '$' + n.toLocaleString('en-US');
@@ -70,6 +72,7 @@ function priceLine(svc: Service) {
 export default function SuperQuote() {
   const [selected, setSelected] = useState<Set<string>>(new Set(DEFAULT_SELECTION));
   const [clientName, setClientName] = useState('');
+  const [clientEmail, setClientEmail] = useState('');
   const [notes, setNotes] = useState('');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
@@ -87,6 +90,7 @@ export default function SuperQuote() {
   const handleReset = () => {
     setSelected(new Set(DEFAULT_SELECTION));
     setClientName('');
+    setClientEmail('');
     setNotes('');
     setSaveStatus('idle');
   };
@@ -118,6 +122,54 @@ export default function SuperQuote() {
     alert('Quote copied to clipboard!');
   };
 
+  const handleExportExcel = () => {
+    if (!selectedServices.length) return;
+    const rows = selectedServices.map((s, idx) => ({
+      "#": idx + 1,
+      Category: s.category,
+      Service: s.name,
+      Description: s.description,
+      "Setup Fee (USD)": s.oneTime ?? 0,
+      "Monthly Fee (USD)": s.monthly ?? 0,
+    }));
+    rows.push({
+      "#": "",
+      Category: "",
+      Service: "TOTAL",
+      Description: notes || "",
+      "Setup Fee (USD)": totalOneTime,
+      "Monthly Fee (USD)": totalMonthly,
+    });
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [{ wch: 4 }, { wch: 14 }, { wch: 34 }, { wch: 56 }, { wch: 16 }, { wch: 16 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Quote");
+    const safeName = (clientName || "client").replace(/[^a-z0-9_-]/gi, "_").slice(0, MAX_QUOTE_FILENAME_LENGTH);
+    XLSX.writeFile(wb, `peach-stack-quote-${safeName}.xlsx`);
+  };
+
+  const handleSendToClient = async () => {
+    const subject = encodeURIComponent(`Peach Stack Quote${clientName ? ` for ${clientName}` : ""}`);
+    const body = encodeURIComponent([
+      clientName ? `Hi ${clientName},` : "Hi,",
+      "",
+      "Here is your Peach Stack quote:",
+      ...selectedServices.map(s => `• ${s.name} (${priceLine(s)})`),
+      "",
+      `Total setup: ${fmt(totalOneTime)}`,
+      `Total monthly: ${fmt(totalMonthly)}/mo`,
+      notes ? `Notes: ${notes}` : "",
+      "",
+      "Reply to this email with any questions."
+    ].filter(Boolean).join("\n"));
+    if (clientEmail) {
+      window.location.href = `mailto:${clientEmail}?subject=${subject}&body=${body}`;
+    } else {
+      await navigator.clipboard.writeText(decodeURIComponent(body));
+      alert("Quote text copied. Add client email first, or paste into your email app.");
+    }
+  };
+
   return (
     <div className="p-8 bg-slate-50 min-h-screen">
       <div className="max-w-5xl mx-auto space-y-8">
@@ -143,6 +195,13 @@ export default function SuperQuote() {
             value={clientName}
             onChange={e => setClientName(e.target.value)}
             placeholder="e.g. Luxe Threading Studio"
+            className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
+          />
+          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 mt-4">Client Email (for send)</label>
+          <input
+            value={clientEmail}
+            onChange={e => setClientEmail(e.target.value)}
+            placeholder="client@email.com"
             className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
           />
         </div>
@@ -266,6 +325,20 @@ export default function SuperQuote() {
                   className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-40 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-colors"
                 >
                   <FileText size={14} /> Copy Quote
+                </button>
+                <button
+                  onClick={handleExportExcel}
+                  disabled={selectedServices.length === 0}
+                  className="flex items-center gap-2 border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 text-slate-700 text-sm font-bold px-4 py-2.5 rounded-xl transition-colors"
+                >
+                  <Table size={14} /> Export Excel
+                </button>
+                <button
+                  onClick={handleSendToClient}
+                  disabled={selectedServices.length === 0}
+                  className="flex items-center gap-2 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-40 text-emerald-700 text-sm font-bold px-4 py-2.5 rounded-xl transition-colors"
+                >
+                  <Send size={14} /> Send to Client
                 </button>
               </div>
             </div>

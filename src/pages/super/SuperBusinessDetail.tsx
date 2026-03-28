@@ -25,6 +25,12 @@ const SERVICES = [
 ];
 
 const CATEGORIES = [...new Set(SERVICES.map(s => s.category))];
+const DEFAULT_PLAN_SERVICES = ['crm'];
+const PLAN_PRESETS = [
+  { name: "Starter", ids: ["crm", "onboarding", "website-basic", "booking"] },
+  { name: "Growth", ids: ["crm", "onboarding", "website-basic", "booking", "reminders", "seo", "reviews"] },
+  { name: "Full Stack", ids: ["crm", "onboarding", "website-custom", "booking", "reminders", "seo", "ai-phone", "ai-chat", "ai-followup", "reviews", "email-sms", "priority-support"] },
+];
 
 const INDUSTRY_LABELS = {
   beauty: 'Beauty & Wellness', restaurant: 'Restaurant', auto: 'Auto Shop',
@@ -53,24 +59,26 @@ export default function SuperBusinessDetail() {
   const [tab, setTab] = useState('overview');
 
   const [editing, setEditing] = useState(false);
-  const [draftServices, setDraftServices] = useState(new Set(['crm']));
+  const [draftServices, setDraftServices] = useState(new Set(DEFAULT_PLAN_SERVICES));
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/super/businesses').then(r => r.json()),
+      fetch('/api/super/businesses/' + id).then(r => r.json()),
       fetch('/api/super/businesses/' + id + '/invoices').then(r => r.json()).catch(() => null),
-    ]).then(([businesses, invData]) => {
-      const found = (Array.isArray(businesses) ? businesses : []).find(b => String(b.id) === String(id));
-      if (found) {
+    ]).then(([found, invData]) => {
+      if (found && !found.error) {
         setBiz(found);
         try {
-          const services = JSON.parse(found.plan_services || '["crm"]');
+          const parsed = JSON.parse(found.plan_services || '[]');
+          const services = Array.isArray(parsed) && parsed.length ? parsed : DEFAULT_PLAN_SERVICES;
           setDraftServices(new Set(services));
         } catch(e) {
-          setDraftServices(new Set(['crm']));
+          setDraftServices(new Set(DEFAULT_PLAN_SERVICES));
         }
+      } else {
+        setBiz(null);
       }
       setInvoiceData(invData);
       setLoading(false);
@@ -103,7 +111,7 @@ export default function SuperBusinessDetail() {
         setEditing(false);
         fetch('/api/super/businesses/' + id + '/invoices').then(r => r.json()).then(setInvoiceData).catch(() => {});
       } else {
-        setSaveMsg('Error saving. Try again.');
+        setSaveMsg(data.error || 'Error saving. Try again.');
       }
     } catch(e) {
       setSaveMsg('Error saving. Try again.');
@@ -130,8 +138,8 @@ export default function SuperBusinessDetail() {
     );
   }
 
-  let currentServices = ['crm'];
-  try { currentServices = JSON.parse(biz.plan_services || '["crm"]'); } catch(e) {}
+  let currentServices = DEFAULT_PLAN_SERVICES;
+  try { currentServices = JSON.parse(biz.plan_services || JSON.stringify(DEFAULT_PLAN_SERVICES)); } catch(e) {}
 
   const activeServices = SERVICES.filter(s => currentServices.includes(s.id));
   const draftServiceList = SERVICES.filter(s => draftServices.has(s.id));
@@ -264,6 +272,19 @@ export default function SuperBusinessDetail() {
               </div>
 
               <div className="space-y-6">
+                {editing && (
+                  <div className="flex flex-wrap gap-2">
+                    {PLAN_PRESETS.map(p => (
+                      <button
+                        key={p.name}
+                        onClick={() => setDraftServices(new Set(p.ids))}
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 text-slate-600 hover:border-orange-300 hover:text-orange-600"
+                      >
+                        {p.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {CATEGORIES.map(cat => (
                   <div key={cat}>
                     <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 pb-2 border-b border-slate-100">{cat}</h3>
