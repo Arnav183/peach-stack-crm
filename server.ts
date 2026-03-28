@@ -287,7 +287,7 @@ async function startServer() {
     };
     const calculatedMrr = services.reduce((sum: number, id: string) => sum + (MONTHLY[id] || 0), 0);
     const tx = db.transaction(() => {
-      const biz = db.prepare("INSERT INTO businesses (name,industry,owner_name,owner_email,phone,plan,mrr,plan_services,status) VALUES (?,?,?,?,?,?,?,?,?,'active')").run(
+      const biz = db.prepare("INSERT INTO businesses (name,industry,owner_name,owner_email,phone,plan,mrr,plan_services,status) VALUES (?,?,?,?,?,?,?,?,?)").run(
         name,
         industry,
         owner_name||"",
@@ -295,7 +295,8 @@ async function startServer() {
         phone||"",
         plan||"starter",
         Number(mrr) > 0 ? Number(mrr) : calculatedMrr,
-        JSON.stringify(services)
+        JSON.stringify(services),
+        "active"
       );
       db.prepare("INSERT INTO users (email,password,role,business_id,name,must_change_password) VALUES (?,?,'business_admin',?,?,1)").run(owner_email.toLowerCase(), bcrypt.hashSync(tempPw, 12), biz.lastInsertRowid, owner_name||"");
       return { id: biz.lastInsertRowid, tempPw };
