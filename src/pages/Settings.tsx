@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Building2, User, Phone, MapPin, Lock, Check, AlertCircle } from "lucide-react";
+import { Building2, User, Phone, MapPin, Lock, Check, AlertCircle, Link as LinkIcon, Copy } from "lucide-react";
 
 interface SettingsProps { user: any; }
 
@@ -19,11 +19,17 @@ export default function Settings({ user }: SettingsProps) {
   const [pwForm, setPwForm] = useState({ current_password:"", new_password:"", confirm_password:"" });
   const [pwMsg, setPwMsg] = useState<{type:'success'|'error';text:string}|null>(null);
   const [savingPw, setSavingPw] = useState(false);
+  const [importConfig, setImportConfig] = useState<{ bookingWebhookUrl: string; websiteImportUrl: string; bookingWebhookKey: string } | null>(null);
+  const [copyMsg, setCopyMsg] = useState<string>("");
 
   useEffect(() => {
-    fetch("/api/business/profile").then(r=>r.json()).then(d => {
+    Promise.all([
+      fetch("/api/business/profile").then(r=>r.json()),
+      fetch("/api/business/import-config").then(r=>r.json()),
+    ]).then(([d, cfg]) => {
       setBiz(d);
       setProfile({ name: d.name||"", owner_name: d.owner_name||"", phone: d.phone||"", address: d.address||"" });
+      if (!cfg.error) setImportConfig(cfg);
     });
   }, []);
 
@@ -49,6 +55,17 @@ export default function Settings({ user }: SettingsProps) {
   };
 
   if (!biz) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" /></div>;
+
+  const copyText = async (value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopyMsg("Copied");
+      setTimeout(() => setCopyMsg(""), 1500);
+    } catch {
+      setCopyMsg("Copy failed");
+      setTimeout(() => setCopyMsg(""), 1500);
+    }
+  };
 
   return (
     <div className="p-8 bg-slate-50 min-h-screen">
@@ -147,6 +164,41 @@ export default function Settings({ user }: SettingsProps) {
               {savingPw ? "Updating..." : "Update Password"}
             </button>
           </form>
+        </div>
+
+        {/* Integrations */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center"><LinkIcon className="w-4 h-4 text-slate-500"/></div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Import Integrations</h3>
+              <p className="text-xs text-slate-400">Use these endpoints for website forms and booking calendars.</p>
+            </div>
+          </div>
+          <div className="p-6 space-y-4">
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+              <p className="text-xs uppercase tracking-wide text-slate-400 font-bold mb-1">Booking Calendar Import URL</p>
+              <p className="text-sm font-mono break-all text-slate-700">{importConfig?.bookingWebhookUrl || "Loading..."}</p>
+              {importConfig?.bookingWebhookUrl && (
+                <button onClick={() => copyText(importConfig.bookingWebhookUrl)} className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:text-orange-500">
+                  <Copy className="w-3.5 h-3.5" /> Copy URL
+                </button>
+              )}
+            </div>
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+              <p className="text-xs uppercase tracking-wide text-slate-400 font-bold mb-1">Website Import URL</p>
+              <p className="text-sm font-mono break-all text-slate-700">{importConfig?.websiteImportUrl || "Loading..."}</p>
+              {importConfig?.websiteImportUrl && (
+                <button onClick={() => copyText(importConfig.websiteImportUrl)} className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:text-orange-500">
+                  <Copy className="w-3.5 h-3.5" /> Copy URL
+                </button>
+              )}
+            </div>
+            <div className="bg-orange-50 border border-orange-100 rounded-xl p-4 text-sm text-orange-800">
+              <strong>Payload tip:</strong> send fields like <code className="bg-orange-100 px-1 rounded">client_name</code>, <code className="bg-orange-100 px-1 rounded">client_email</code>, <code className="bg-orange-100 px-1 rounded">service</code>, <code className="bg-orange-100 px-1 rounded">date</code>. New clients/services are created automatically if needed.
+            </div>
+            {copyMsg && <p className="text-xs font-semibold text-emerald-600">{copyMsg}</p>}
+          </div>
         </div>
       </div>
     </div>
