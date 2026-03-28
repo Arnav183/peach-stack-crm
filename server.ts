@@ -53,6 +53,93 @@ const QUOTE_SERVICE_CATALOG = [
   { id: "social", name: "Social Media Templates", category: "Marketing", free_option: "Use Canva free template workflow" },
   { id: "priority-support", name: "Priority Support", category: "Support", free_option: "Built-in support queue process" },
 ];
+const MONTHLY_SERVICE_PRICING: Record<string, number> = {
+  crm: 25,
+  "website-basic": 15,
+  "website-custom": 25,
+  seo: 15,
+  booking: 10,
+  reminders: 10,
+  "ai-phone": 35,
+  "ai-chat": 15,
+  "ai-followup": 15,
+  reviews: 12,
+  "email-sms": 15,
+  "priority-support": 20,
+};
+const SERVICE_TEMPLATE_CATALOG: Record<string, { name: string; checklist: string[]; defaults: Record<string, any> }> = {
+  crm: {
+    name: "CRM Dashboard",
+    checklist: ["Import client list", "Set appointment defaults", "Confirm invoice branding", "Enable client portal access"],
+    defaults: { portalEnabled: true, invoiceBranding: "default" },
+  },
+  onboarding: {
+    name: "Onboarding & Data Setup",
+    checklist: ["Collect business profile details", "Import existing customer data", "Review team workflow preferences"],
+    defaults: { kickoffCall: true },
+  },
+  "website-basic": {
+    name: "Basic Website (5 pages)",
+    checklist: ["Confirm brand colors and logo", "Set page copy placeholders", "Connect contact form routing"],
+    defaults: { pages: ["Home", "About", "Services", "Gallery", "Contact"] },
+  },
+  "website-custom": {
+    name: "Custom Website",
+    checklist: ["Collect custom layout preferences", "Map booking integration placement", "Prepare SEO metadata placeholders"],
+    defaults: { customDesign: true, seoReady: true },
+  },
+  seo: {
+    name: "Local SEO Setup",
+    checklist: ["Capture primary service keywords", "Set local citation checklist", "Prepare Google Business Profile prompts"],
+    defaults: { mapFocus: true },
+  },
+  booking: {
+    name: "Online Booking Calendar",
+    checklist: ["Enable booking webhook", "Map services to booking slots", "Confirm booking confirmation messaging"],
+    defaults: { autoSync: true },
+  },
+  reminders: {
+    name: "Appointment Reminders",
+    checklist: ["Set reminder timing windows", "Load SMS/email reminder templates", "Verify test-mode reminder flow"],
+    defaults: { smsHoursBefore: 24, emailHoursBefore: 24 },
+  },
+  "ai-phone": {
+    name: "AI Phone Agent",
+    checklist: ["Set business-hours fallback", "Load FAQ starter prompts", "Run no-cost simulation call test"],
+    defaults: { simulationMode: true },
+  },
+  "ai-chat": {
+    name: "AI Website Chat Widget",
+    checklist: ["Set lead capture fields", "Load FAQ starter prompts", "Confirm booking handoff behavior"],
+    defaults: { simulationMode: true, leadCapture: true },
+  },
+  "ai-followup": {
+    name: "Auto Follow-up Sequences",
+    checklist: ["Set review request cadence", "Set rebook prompt timing", "Set promo sequence defaults"],
+    defaults: { sequenceMode: "post-visit" },
+  },
+  reviews: {
+    name: "Review Management",
+    checklist: ["Set preferred review link", "Enable post-visit review request", "Define response SLA preference"],
+    defaults: { autoRequest: true },
+  },
+  "email-sms": {
+    name: "Email & SMS Marketing",
+    checklist: ["Set newsletter sender profile", "Set promo campaign defaults", "Prepare re-engagement segment rules"],
+    defaults: { emailEnabled: true, smsTestMode: true },
+  },
+  social: {
+    name: "Social Media Templates",
+    checklist: ["Select brand color palette", "Set posting cadence preference", "Link Canva template handoff notes"],
+    defaults: { templatePack: "starter-20" },
+  },
+  "priority-support": {
+    name: "Priority Support",
+    checklist: ["Set support contact preference", "Schedule monthly check-in reminder", "Enable proactive monitoring notes"],
+    defaults: { responseSla: "same-day" },
+  },
+};
+const EMPTY_SETTINGS_JSON = "{}";
 
 function generateTempPassword() {
   return Array.from({ length: TEMP_PASSWORD_LENGTH }, () => TEMP_PASSWORD_CHARS[Math.floor(Math.random() * TEMP_PASSWORD_CHARS.length)]).join("");
@@ -88,6 +175,45 @@ function parsePlanServices(raw: any): string[] {
 
 function hasPlanService(planServices: string[], serviceId: string) {
   return planServices.includes(serviceId);
+}
+
+function normalizePlanServices(raw: any): string[] {
+  const allowed = new Set(QUOTE_SERVICE_CATALOG.map((svc) => svc.id));
+  const incoming = parsePlanServices(raw);
+  const normalized = Array.from(new Set(incoming.filter((id) => allowed.has(id))));
+  return normalized.includes("crm") ? normalized : ["crm", ...normalized];
+}
+
+function buildServiceTemplate(serviceId: string, business: { name?: string; industry?: string }) {
+  const base = SERVICE_TEMPLATE_CATALOG[serviceId];
+  if (!base) return null;
+  return {
+    service_id: serviceId,
+    name: base.name,
+    status: "ready",
+    applied_at: new Date().toISOString(),
+    checklist: base.checklist.map((label) => ({ label, done: false })),
+    preferences: {
+      businessName: business?.name || "",
+      industry: business?.industry || "general",
+      ...base.defaults,
+    },
+  };
+}
+
+function applyServiceTemplates(rawSettings: any, business: { name?: string; industry?: string }, serviceIds: string[], force = false) {
+  const settings = parseBusinessSettings(rawSettings);
+  const existingTemplates = settings.serviceTemplates && typeof settings.serviceTemplates === "object" ? settings.serviceTemplates : {};
+  const nextTemplates = { ...existingTemplates };
+  for (const serviceId of serviceIds) {
+    if (!SERVICE_TEMPLATE_CATALOG[serviceId]) continue;
+    if (!force && nextTemplates[serviceId]) continue;
+    const template = buildServiceTemplate(serviceId, business);
+    if (template) nextTemplates[serviceId] = template;
+  }
+  settings.serviceTemplates = nextTemplates;
+  settings.templatePresetVersion = "quote-builder-v1";
+  return settings;
 }
 
 // Rate limiting store (in-memory, per IP)
@@ -488,16 +614,12 @@ async function startServer() {
     if (!name || !owner_email || !industry) return res.status(400).json({ error: "name, industry, owner_email required" });
     if (db.prepare("SELECT id FROM users WHERE email=?").get(owner_email.toLowerCase())) return res.status(409).json({ error: "Email already in use" });
     const tempPw = generateTempPassword();
-    const services = Array.isArray(plan_services) && plan_services.length ? plan_services : ["crm"];
-    const MONTHLY: Record<string, number> = {
-      'crm': 25, 'website-basic': 15, 'website-custom': 25, 'seo': 15,
-      'booking': 10, 'reminders': 10, 'ai-phone': 35, 'ai-chat': 15,
-      'ai-followup': 15, 'reviews': 12, 'email-sms': 15, 'priority-support': 20,
-    };
-    const calculatedMrr = services.reduce((sum: number, id: string) => sum + (MONTHLY[id] || 0), 0);
+    const services = normalizePlanServices(plan_services);
+    const calculatedMrr = services.reduce((sum: number, id: string) => sum + (MONTHLY_SERVICE_PRICING[id] || 0), 0);
+    const initialSettings = applyServiceTemplates(EMPTY_SETTINGS_JSON, { name, industry }, services, true);
     const tx = db.transaction(() => {
       const insertBusiness = db.prepare(
-        "INSERT INTO businesses (name,industry,owner_name,owner_email,phone,plan,mrr,plan_services,status) VALUES (@name,@industry,@owner_name,@owner_email,@phone,@plan,@mrr,@plan_services,@status)"
+        "INSERT INTO businesses (name, industry, owner_name, owner_email, phone, plan, mrr, plan_services, status, settings) VALUES (@name, @industry, @owner_name, @owner_email, @phone, @plan, @mrr, @plan_services, @status, @settings)"
       );
       const biz = insertBusiness.run({
         name,
@@ -509,6 +631,7 @@ async function startServer() {
         mrr: Number(mrr) > 0 ? Number(mrr) : calculatedMrr,
         plan_services: JSON.stringify(services),
         status: "active",
+        settings: JSON.stringify(initialSettings),
       });
       db.prepare("INSERT INTO users (email,password,role,business_id,name,must_change_password) VALUES (?,?,'business_admin',?,?,1)").run(owner_email.toLowerCase(), bcrypt.hashSync(tempPw, 12), biz.lastInsertRowid, owner_name||"");
       return { id: biz.lastInsertRowid, tempPw };
@@ -1006,25 +1129,42 @@ async function startServer() {
 // ── Plan & Invoice routes ─────────────────────────────────────────────────────
 
 // Update a business plan_services and recalculate mrr
-app.put('/api/super/businesses/:id/plan', auth, superadminOnly, (req, res) => {
+app.put('/api/super/businesses/:id/plan', auth, superadminOnly, createRouteRateLimiter("superadmin_plan_write", 60, 60 * 1000), (req, res) => {
+  const planRateLimit = checkIntegrationRateLimit(`superadmin-plan:${req.user?.id || "anon"}:${req.ip || "unknown"}`);
+  if (!planRateLimit.allowed) return res.status(429).json({ error: `Too many requests. Try again in ${planRateLimit.retryAfter}s` });
   const { plan_services } = req.body; // array of service IDs
   if (!Array.isArray(plan_services)) return res.status(400).json({ error: 'plan_services must be an array' });
-
-  // Service catalog monthly prices (mirrors SuperQuote.tsx)
-  const MONTHLY: Record<string, number> = {
-    'crm': 25, 'website-basic': 15, 'website-custom': 25, 'seo': 15,
-    'booking': 10, 'reminders': 10, 'ai-phone': 35, 'ai-chat': 15,
-    'ai-followup': 15, 'reviews': 12, 'email-sms': 15, 'priority-support': 20,
-  };
-  const mrr = plan_services.reduce((sum: any, id: any) => sum + (MONTHLY[id] || 0), 0);
+  const biz = db.prepare("SELECT id, name, industry, settings FROM businesses WHERE id=?").get(req.params.id) as any;
+  if (!biz) return res.status(404).json({ error: "Business not found" });
+  const normalizedServices = normalizePlanServices(plan_services);
+  const mrr = normalizedServices.reduce((sum: number, id: string) => sum + (MONTHLY_SERVICE_PRICING[id] || 0), 0);
+  const nextSettings = applyServiceTemplates(biz.settings, { name: biz.name, industry: biz.industry }, normalizedServices, false);
 
   try {
-    db.prepare('UPDATE businesses SET plan_services = ?, mrr = ? WHERE id = ?')
-      .run(JSON.stringify(plan_services), mrr, req.params.id);
-    res.json({ success: true, mrr });
+    db.prepare('UPDATE businesses SET plan_services = ?, mrr = ?, settings = ? WHERE id = ?')
+      .run(JSON.stringify(normalizedServices), mrr, JSON.stringify(nextSettings), req.params.id);
+    res.json({ success: true, mrr, plan_services: normalizedServices, settings: nextSettings });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to save plan' });
   }
+});
+
+app.post("/api/super/businesses/:id/templates/:serviceId/apply", auth, superadminOnly, createRouteRateLimiter("superadmin_template_apply", 60, 60 * 1000), (req, res) => {
+  const templateRateLimit = checkIntegrationRateLimit(`superadmin-template:${req.user?.id || "anon"}:${req.ip || "unknown"}`);
+  if (!templateRateLimit.allowed) return res.status(429).json({ error: `Too many requests. Try again in ${templateRateLimit.retryAfter}s` });
+  const serviceId = String(req.params.serviceId || "").trim();
+  if (!SERVICE_TEMPLATE_CATALOG[serviceId]) return res.status(400).json({ error: "Unknown service" });
+  const force = Boolean(req.body?.force);
+  const biz = db.prepare("SELECT id, name, industry, settings, plan_services FROM businesses WHERE id=?").get(req.params.id) as any;
+  if (!biz) return res.status(404).json({ error: "Business not found" });
+  const existingServices = normalizePlanServices(biz.plan_services);
+  const nextServices = Array.from(new Set([...existingServices, serviceId]));
+  const nextSettings = applyServiceTemplates(biz.settings, { name: biz.name, industry: biz.industry }, [serviceId], force);
+  const mrr = nextServices.reduce((sum: number, id: string) => sum + (MONTHLY_SERVICE_PRICING[id] || 0), 0);
+  db.prepare("UPDATE businesses SET plan_services = ?, mrr = ?, settings = ? WHERE id = ?")
+    .run(JSON.stringify(nextServices), mrr, JSON.stringify(nextSettings), req.params.id);
+  const template = nextSettings?.serviceTemplates?.[serviceId] || null;
+  res.json({ success: true, serviceId, mrr, plan_services: nextServices, settings: nextSettings, template });
 });
 
 // Get invoices for a business (last 3 months + next 3 months)

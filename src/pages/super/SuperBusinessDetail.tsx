@@ -62,6 +62,7 @@ export default function SuperBusinessDetail() {
   const [draftServices, setDraftServices] = useState(new Set(DEFAULT_PLAN_SERVICES));
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
+  const [applyingTemplate, setApplyingTemplate] = useState('');
 
   useEffect(() => {
     Promise.all([
@@ -117,6 +118,39 @@ export default function SuperBusinessDetail() {
       setSaveMsg('Error saving. Try again.');
     }
     setSaving(false);
+  };
+
+  const applyTemplate = async (serviceId: string) => {
+    setSaveMsg('');
+    setApplyingTemplate(serviceId);
+    try {
+      const res = await fetch(`/api/super/businesses/${id}/templates/${serviceId}/apply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force: true }),
+      });
+      const data = await res.json();
+      if (res.ok && data?.success) {
+        const nextPlanServices = Array.isArray(data.plan_services) ? data.plan_services : [];
+        const nextSettings = data.settings && typeof data.settings === 'object' ? data.settings : {};
+        setBiz(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            mrr: data.mrr,
+            plan_services: JSON.stringify(nextPlanServices),
+            settings: JSON.stringify(nextSettings),
+          };
+        });
+        setDraftServices(new Set(nextPlanServices));
+        setSaveMsg(`Template applied for ${SERVICES.find(s => s.id === serviceId)?.name || serviceId}.`);
+      } else {
+        setSaveMsg(data?.error || 'Could not apply template.');
+      }
+    } catch (e) {
+      setSaveMsg('Could not apply template.');
+    }
+    setApplyingTemplate('');
   };
 
   if (loading) {
@@ -300,6 +334,14 @@ export default function SuperBusinessDetail() {
                               {svc.oneTime != null && <div>{fmt(svc.oneTime)} setup</div>}
                               {svc.monthly != null && <div>{fmt(svc.monthly)}/mo</div>}
                             </div>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); applyTemplate(svc.id); }}
+                              disabled={applyingTemplate === svc.id}
+                              className="ml-2 px-2.5 py-1 text-[10px] font-bold rounded-lg border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                            >
+                              {applyingTemplate === svc.id ? 'Applying...' : 'Apply Template'}
+                            </button>
                           </label>
                         );
                       })}
