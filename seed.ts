@@ -79,16 +79,15 @@ db.prepare("INSERT INTO users (email,password,role,name) VALUES (?,?,'superadmin
   .run(SA_EMAIL, bcrypt.hashSync(SA_PASS, 12));
 
 // Always update superadmin password to match env var (runs on every boot)
-db.run(
-  "UPDATE users SET password=?, email=? WHERE role='superadmin'",
-  [bcrypt.hashSync(SA_PASS, 12), SA_EMAIL]
-);
+db.prepare(
+  "UPDATE users SET password=?, email=? WHERE role='superadmin'"
+).run(bcrypt.hashSync(SA_PASS, 12), SA_EMAIL);
 
 // Always update demo business passwords
 const DEMO_PASS = bcrypt.hashSync('demo1234', 10);
-db.run("UPDATE users SET password=? WHERE email='priya@luxethreading.com'", [DEMO_PASS]);
-db.run("UPDATE users SET password=? WHERE email='marcus@metroauto.com'", [DEMO_PASS]);
-db.run("UPDATE users SET password=? WHERE email='amara@peachtreebites.com'", [DEMO_PASS]);
+db.prepare("UPDATE users SET password=? WHERE email='priya@luxethreading.com'").run(DEMO_PASS);
+db.prepare("UPDATE users SET password=? WHERE email='marcus@metroauto.com'").run(DEMO_PASS);
+db.prepare("UPDATE users SET password=? WHERE email='amara@peachtreebites.com'").run(DEMO_PASS);
 console.log("Superadmin created: " + SA_EMAIL);
 
 // ── BUSINESS 1: Hair / Beauty Salon ─────────────────────────────────────────

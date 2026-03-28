@@ -1,19 +1,19 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Search, MoreHorizontal, RefreshCw, Trash2, X, Eye, EyeOff, Copy, CheckCircle2, AlertCircle, Building2 } from "lucide-react";
+import { Plus, Search, MoreHorizontal, RefreshCw, Trash2, X, Eye, EyeOff, Copy, CheckCircle2, AlertCircle, Building2, Lock } from "lucide-react";
 import { format, parseISO } from "date-fns";
 
 const INDUSTRIES = ["beauty","auto","restaurant","medical","retail","fitness","agency","general"];
 const SERVICE_TAGS = [
   { id:"crm",      label:"CRM Dashboard",   mrr:25 },
-  { id:"website",  label:"Website",          mrr:15 },
+  { id:"website-basic",  label:"Website",          mrr:15 },
   { id:"booking",  label:"Bookings",         mrr:10 },
-  { id:"ai_phone", label:"AI Phone Agent",   mrr:35 },
+  { id:"ai-phone", label:"AI Phone Agent",   mrr:35 },
   { id:"reviews",  label:"Review Mgmt",      mrr:12 },
   { id:"seo",      label:"Local SEO",        mrr:15 },
-  { id:"email",    label:"Email/SMS Mkt",    mrr:15 },
-  { id:"ai_chat",  label:"AI Chat Widget",   mrr:15 },
-  { id:"support",  label:"Priority Support", mrr:20 },
+  { id:"email-sms",    label:"Email/SMS Mkt",    mrr:15 },
+  { id:"ai-chat",  label:"AI Chat Widget",   mrr:15 },
+  { id:"priority-support",  label:"Priority Support", mrr:20 },
 ];
 
 const INDUSTRY_COLORS: Record<string,string> = {
@@ -47,6 +47,8 @@ export default function SuperBusinesses() {
   const [showPw, setShowPw] = useState(false);
   const [copiedPw, setCopiedPw] = useState(false);
   const [copiedReset, setCopiedReset] = useState(false);
+  const [showPwVault, setShowPwVault] = useState(false);
+  const [pwVault, setPwVault] = useState<any[]>([]);
 
   const emptyForm = { name:"", industry:"beauty", owner_name:"", owner_email:"", phone:"", mrr:"" };
   const [form, setForm] = useState(emptyForm);
@@ -54,6 +56,20 @@ export default function SuperBusinesses() {
 
   const load = () => fetch("/api/super/businesses").then(r=>r.json()).then(setBusinesses).finally(()=>setLoading(false));
   useEffect(()=>{load();},[]);
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("super_temp_password_vault");
+      if (saved) setPwVault(JSON.parse(saved));
+    } catch {}
+  }, []);
+
+  const saveTempCredential = (entry: any) => {
+    setPwVault(prev => {
+      const next = [entry, ...prev].slice(0, 50);
+      localStorage.setItem("super_temp_password_vault", JSON.stringify(next));
+      return next;
+    });
+  };
 
   const toggleTag = (tag: typeof SERVICE_TAGS[0]) => {
     const next = new Set(activeTags);
@@ -72,13 +88,22 @@ export default function SuperBusinesses() {
   const totalMrr = filtered.reduce((s,b) => s + (b.mrr||0), 0);
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true); setCreateMsg(null);
+    const planServices = Array.from(new Set(["crm", ...Array.from(activeTags)]));
     const res = await fetch("/api/super/businesses", {
       method: "POST", headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({ ...form, plan:"custom", mrr: parseFloat(form.mrr)||0 })
+      body: JSON.stringify({ ...form, plan:"custom", mrr: parseFloat(form.mrr)||0, plan_services: planServices })
     });
     const d = await res.json();
     if (res.ok) {
       setCreateMsg({ type:'success', text:'Business created! Share these credentials with the client.', creds: { email: form.owner_email, password: d.tempPassword } });
+      saveTempCredential({
+        businessId: d.id,
+        businessName: form.name,
+        email: form.owner_email,
+        tempPassword: d.tempPassword,
+        source: "create",
+        createdAt: new Date().toISOString(),
+      });
       load();
     } else { setCreateMsg({ type:'error', text: d.error || 'Failed to create.' }); }
     setSaving(false);
@@ -92,7 +117,17 @@ export default function SuperBusinesses() {
     setSaving(true); setResetMsg(null);
     const res = await fetch("/api/super/businesses/" + showReset.id + "/reset-password", { method:"POST" });
     const d = await res.json();
-    if (res.ok) { setResetMsg({ type:'success', text:'Password reset. Share with client.', pw: d.tempPassword }); }
+    if (res.ok) {
+      setResetMsg({ type:'success', text:'Password reset. Share with client.', pw: d.tempPassword });
+      saveTempCredential({
+        businessId: showReset.id,
+        businessName: showReset.name,
+        email: showReset.admin_email || showReset.owner_email || "",
+        tempPassword: d.tempPassword,
+        source: "reset",
+        createdAt: new Date().toISOString(),
+      });
+    }
     else { setResetMsg({ type:'error', text: d.error || 'Failed.' }); }
     setSaving(false);
   };
@@ -123,10 +158,15 @@ export default function SuperBusinesses() {
           <h1 className="text-2xl font-bold text-slate-900">Client Businesses</h1>
           <p className="text-slate-500 text-sm mt-0.5">{businesses.filter(b=>b.status==='active').length} active · {fmt(totalMrr)}/mo filtered MRR</p>
         </div>
-        <button onClick={()=>{setShowCreate(true);setCreateMsg(null);setForm(emptyForm);setActiveTags(new Set());}}
-          className="flex items-center gap-2 px-4 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-bold hover:bg-orange-400 shadow-lg shadow-orange-500/20">
-          <Plus className="w-4 h-4" />Add Business
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowPwVault(true)} className="flex items-center gap-2 px-4 py-2.5 border border-slate-200 bg-white text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-50">
+            <Lock className="w-4 h-4" /> Temp Passwords
+          </button>
+          <button onClick={()=>{setShowCreate(true);setCreateMsg(null);setForm(emptyForm);setActiveTags(new Set());}}
+            className="flex items-center gap-2 px-4 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-bold hover:bg-orange-400 shadow-lg shadow-orange-500/20">
+            <Plus className="w-4 h-4" />Add Business
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -198,20 +238,20 @@ export default function SuperBusinesses() {
                       {biz.last_login ? format(parseISO(biz.last_login), "MMM d, h:mm a") : <span className="text-slate-300">Never</span>}
                     </td>
                     <td className="px-6 py-4 text-right relative">
-                      <button onClick={()=>setActiveMenu(activeMenu===biz.id?null:biz.id)}
+                      <button onClick={(e)=>{e.stopPropagation();setActiveMenu(activeMenu===biz.id?null:biz.id);}}
                         className="p-2 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors">
                         <MoreHorizontal className="w-4 h-4" />
                       </button>
                       {activeMenu===biz.id && (
                         <div className="absolute right-6 top-12 w-52 bg-white rounded-xl shadow-xl border border-slate-100 py-1 z-20" onClick={e=>e.stopPropagation()}>
-                          <button onClick={()=>handleResetPw(biz)} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50">
+                          <button onClick={(e)=>{e.stopPropagation();handleResetPw(biz);}} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50">
                             <RefreshCw className="w-3.5 h-3.5" />Reset Password
                           </button>
-                          <button onClick={()=>handleStatusToggle(biz)} className={"w-full flex items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-slate-50 " + (biz.status==='active'?"text-amber-600":"text-emerald-600")}>
+                          <button onClick={(e)=>{e.stopPropagation();handleStatusToggle(biz);}} className={"w-full flex items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-slate-50 " + (biz.status==='active'?"text-amber-600":"text-emerald-600")}>
                             {biz.status==='active'?"⏸ Suspend":"▶ Activate"}
                           </button>
                           <div className="h-px bg-slate-100 my-1" />
-                          <button onClick={()=>handleDelete(biz)} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50">
+                          <button onClick={(e)=>{e.stopPropagation();handleDelete(biz);}} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50">
                             <Trash2 className="w-3.5 h-3.5" />Delete Business
                           </button>
                         </div>
@@ -352,6 +392,41 @@ export default function SuperBusinesses() {
                     <button onClick={()=>setShowReset(null)} className="flex-1 py-2.5 border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50">Cancel</button>
                     <button onClick={confirmReset} disabled={saving} className="flex-1 py-2.5 bg-[#0f172a] text-white rounded-xl text-sm font-bold hover:bg-slate-800 disabled:opacity-50">{saving?"Resetting...":"Reset Password"}</button>
                   </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {showPwVault && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="text-base font-bold text-slate-900">Temporary Password Vault</h3>
+              <button onClick={()=>setShowPwVault(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-6 max-h-[70vh] overflow-y-auto">
+              {pwVault.length === 0 ? (
+                <p className="text-sm text-slate-500">No temporary passwords saved yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {pwVault.map((entry, idx) => (
+                    <div key={idx} className="rounded-xl border border-slate-200 p-4 bg-slate-50">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-bold text-slate-800">{entry.businessName || "Business"}</p>
+                          <p className="text-xs text-slate-500">{entry.email}</p>
+                          <p className="text-[11px] text-slate-400 mt-1">{entry.source === "reset" ? "Password Reset" : "Business Created"} · {new Date(entry.createdAt).toLocaleString()}</p>
+                        </div>
+                        <div className="flex items-center gap-2 min-w-[220px]">
+                          <p className="font-mono text-sm font-bold text-slate-800 flex-1">{entry.tempPassword}</p>
+                          <button onClick={()=>copy(entry.tempPassword, setCopiedReset)} className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500">
+                            <Copy className="w-3.5 h-3.5"/>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

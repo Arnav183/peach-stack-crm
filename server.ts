@@ -21,7 +21,7 @@ if (!process.env.JWT_SECRET) {
 }
 const JWT_SECRET = process.env.JWT_SECRET || "dev-local-only-not-for-production";
 
-const PORT = process.env.PORT || 8080;
+const PORT = Number(process.env.PORT || 8080);
 const DB_PATH = path.join(process.cwd(), "crm.db");
 
 // Rate limiting store (in-memory, per IP)
@@ -63,10 +63,10 @@ setTimeout(() => {
     const _adminPass  = process.env.SUPERADMIN_PASSWORD || 'PeachStack$105';
     const _adminHash  = bcrypt.hashSync(_adminPass, 10);
     const _demoHash   = bcrypt.hashSync('demo1234', 10);
-    db.run("UPDATE users SET password=?, email=? WHERE role='superadmin'", [_adminHash, _adminEmail]);
-    db.run("UPDATE users SET password=? WHERE email='priya@luxethreading.com'", [_demoHash]);
-    db.run("UPDATE users SET password=? WHERE email='marcus@metroauto.com'", [_demoHash]);
-    db.run("UPDATE users SET password=? WHERE email='amara@peachtreebites.com'", [_demoHash]);
+    db.prepare("UPDATE users SET password=?, email=? WHERE role='superadmin'").run(_adminHash, _adminEmail);
+    db.prepare("UPDATE users SET password=? WHERE email='priya@luxethreading.com'").run(_demoHash);
+    db.prepare("UPDATE users SET password=? WHERE email='marcus@metroauto.com'").run(_demoHash);
+    db.prepare("UPDATE users SET password=? WHERE email='amara@peachtreebites.com'").run(_demoHash);
     console.log('Credentials synced for', _adminEmail, 'and demo accounts');
   } catch(e) { console.error('Credential sync failed:', e); }
 }, 2000); // 2s delay to ensure DB is ready
@@ -275,12 +275,28 @@ async function startServer() {
   });
 
   app.post("/api/super/businesses", auth, superadminOnly, async (req, res) => {
-    const { name, industry, owner_name, owner_email, phone, plan, mrr } = req.body;
+    const { name, industry, owner_name, owner_email, phone, plan, mrr, plan_services } = req.body;
     if (!name || !owner_email || !industry) return res.status(400).json({ error: "name, industry, owner_email required" });
     if (db.prepare("SELECT id FROM users WHERE email=?").get(owner_email.toLowerCase())) return res.status(409).json({ error: "Email already in use" });
     const tempPw = Array.from({length:12}, () => "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789!@#"[Math.floor(Math.random()*57)]).join("");
+    const services = Array.isArray(plan_services) && plan_services.length ? plan_services : ["crm"];
+    const MONTHLY: Record<string, number> = {
+      'crm': 25, 'website-basic': 15, 'website-custom': 25, 'seo': 15,
+      'booking': 10, 'reminders': 10, 'ai-phone': 35, 'ai-chat': 15,
+      'ai-followup': 15, 'reviews': 12, 'email-sms': 15, 'priority-support': 20,
+    };
+    const calculatedMrr = services.reduce((sum: number, id: string) => sum + (MONTHLY[id] || 0), 0);
     const tx = db.transaction(() => {
-      const biz = db.prepare("INSERT INTO businesses (name,industry,owner_name,owner_email,phone,plan,mrr,status) VALUES (?,?,?,?,?,?,?,'active')").run(name, industry, owner_name||"", owner_email.toLowerCase(), phone||"", plan||"starter", mrr||0);
+      const biz = db.prepare("INSERT INTO businesses (name,industry,owner_name,owner_email,phone,plan,mrr,plan_services,status) VALUES (?,?,?,?,?,?,?,?,?,'active')").run(
+        name,
+        industry,
+        owner_name||"",
+        owner_email.toLowerCase(),
+        phone||"",
+        plan||"starter",
+        Number(mrr) > 0 ? Number(mrr) : calculatedMrr,
+        JSON.stringify(services)
+      );
       db.prepare("INSERT INTO users (email,password,role,business_id,name,must_change_password) VALUES (?,?,'business_admin',?,?,1)").run(owner_email.toLowerCase(), bcrypt.hashSync(tempPw, 12), biz.lastInsertRowid, owner_name||"");
       return { id: biz.lastInsertRowid, tempPw };
     });
@@ -314,6 +330,16 @@ async function startServer() {
     const tempPw = Array.from({length:12}, () => "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789!@#"[Math.floor(Math.random()*57)]).join("");
     db.prepare("UPDATE users SET password=?,must_change_password=1 WHERE business_id=? AND role='business_admin'").run(bcrypt.hashSync(tempPw, 12), req.params.id);
     res.json({ tempPassword: tempPw });
+  });
+  app.get("/api/super/businesses/:id", auth, superadminOnly, (req, res) => {
+    const business = db.prepare(`
+      SELECT b.*,
+        (SELECT email FROM users WHERE business_id=b.id AND role='business_admin' LIMIT 1) as admin_email
+      FROM businesses b
+      WHERE b.id=?
+    `).get(req.params.id);
+    if (!business) return res.status(404).json({ error: "Business not found" });
+    res.json(business);
   });
   // --- BUSINESS ROUTES (all scoped to req.user.business_id) ---
 
@@ -358,9 +384,36 @@ async function startServer() {
     const te = (db.prepare(`SELECT COALESCE(sum(amount),0) as t FROM expenses ${ef}`).get(...ep) as any).t;
     const ua = (db.prepare("SELECT count(*) as c FROM appointments WHERE business_id=? AND date>datetime('now')").get(bid) as any).c;
     const ui = (db.prepare("SELECT count(*) as c, COALESCE(sum(amount),0) as t FROM invoices WHERE business_id=? AND status='Unpaid'").get(bid) as any);
-    const rbm = db.prepare(`SELECT strftime('%Y-%m',a.date) as month, sum(a.price+a.tip) as total FROM appointments a ${af} GROUP BY month ORDER BY month DESC LIMIT 12`).all(...ap);
+    const rbm = db.prepare(`
+      SELECT month, SUM(total) as total
+      FROM (
+        SELECT strftime('%Y-%m', a.date) as month, SUM(a.price+a.tip) as total
+        FROM appointments a ${af}
+        GROUP BY month
+        UNION ALL
+        SELECT strftime('%Y-%m', m.date) as month, SUM(m.amount) as total
+        FROM manual_revenue m ${mf}
+        GROUP BY month
+      )
+      GROUP BY month
+      ORDER BY month DESC
+      LIMIT 12
+    `).all(...ap, ...mp);
     const ebm = db.prepare(`SELECT strftime('%Y-%m',date) as month, sum(amount) as total FROM expenses ${ef} GROUP BY month ORDER BY month DESC LIMIT 12`).all(...ep);
-    const rbs = db.prepare(`SELECT a.service, sum(a.price) as total, count(*) as count FROM appointments a ${af} GROUP BY a.service ORDER BY total DESC`).all(...ap);
+    const rbs = db.prepare(`
+      SELECT service, SUM(total) as total, SUM(count) as count
+      FROM (
+        SELECT a.service as service, SUM(a.price+a.tip) as total, COUNT(*) as count
+        FROM appointments a ${af}
+        GROUP BY a.service
+        UNION ALL
+        SELECT m.source as service, SUM(m.amount) as total, COUNT(*) as count
+        FROM manual_revenue m ${mf}
+        GROUP BY m.source
+      )
+      GROUP BY service
+      ORDER BY total DESC
+    `).all(...ap, ...mp);
     const ebc = db.prepare(`SELECT category as name, sum(amount) as value FROM expenses ${ef} GROUP BY category ORDER BY value DESC`).all(...ep);
     const na = db.prepare("SELECT a.*, COALESCE(c.name,'Walk-in') as client_name FROM appointments a LEFT JOIN clients c ON a.client_id=c.id WHERE a.business_id=? AND a.date>datetime('now') ORDER BY a.date ASC LIMIT 5").all(bid);
     const top = db.prepare("SELECT c.id,c.name,c.email,c.status, COALESCE(sum(a.price+a.tip),0) as total_revenue, count(a.id) as visit_count FROM clients c LEFT JOIN appointments a ON a.client_id=c.id AND a.status='Completed' WHERE c.business_id=? GROUP BY c.id ORDER BY total_revenue DESC LIMIT 6").all(bid);
@@ -568,61 +621,59 @@ app.put('/api/super/businesses/:id/plan', auth, superadminOnly, (req, res) => {
   };
   const mrr = plan_services.reduce((sum: any, id: any) => sum + (MONTHLY[id] || 0), 0);
 
-  db.run(
-    'UPDATE businesses SET plan_services = ?, mrr = ? WHERE id = ?',
-    [JSON.stringify(plan_services), mrr, req.params.id],
-    function(err) {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({ success: true, mrr });
-    }
-  );
+  try {
+    db.prepare('UPDATE businesses SET plan_services = ?, mrr = ? WHERE id = ?')
+      .run(JSON.stringify(plan_services), mrr, req.params.id);
+    res.json({ success: true, mrr });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to save plan' });
+  }
 });
 
 // Get invoices for a business (last 3 months + next 3 months)
 app.get('/api/super/businesses/:id/invoices', auth, superadminOnly, (req, res) => {
   const bizId = parseInt(req.params.id);
-  db.get('SELECT name, mrr, plan_services FROM businesses WHERE id = ?', [bizId], (err, biz: any) => {
-    if (err || !biz) return res.status(404).json({ error: 'Business not found' });
+  const biz = db.prepare('SELECT name, mrr, plan_services FROM businesses WHERE id = ?').get(bizId) as any;
+  if (!biz) return res.status(404).json({ error: 'Business not found' });
 
-    const mrr = biz.mrr || 0;
-    const now = new Date();
-    const invoices = [];
+  const mrr = biz.mrr || 0;
+  const now = new Date();
+  const invoices = [];
 
-    // Past 3 months (paid)
-    for (let i = 3; i >= 1; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      invoices.push({
-        id: 'inv-past-' + i,
-        period: d.toLocaleString('default', { month: 'long', year: 'numeric' }),
-        amount: mrr,
-        status: 'paid',
-        due_date: new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0],
-      });
-    }
-
-    // Current month (due)
+  // Past 3 months (paid)
+  for (let i = 3; i >= 1; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     invoices.push({
-      id: 'inv-current',
-      period: now.toLocaleString('default', { month: 'long', year: 'numeric' }),
+      id: 'inv-past-' + i,
+      period: d.toLocaleString('default', { month: 'long', year: 'numeric' }),
       amount: mrr,
-      status: 'due',
-      due_date: new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0],
+      status: 'paid',
+      due_date: new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0],
     });
+  }
 
-    // Next 2 months (upcoming)
-    for (let i = 1; i <= 2; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-      invoices.push({
-        id: 'inv-upcoming-' + i,
-        period: d.toLocaleString('default', { month: 'long', year: 'numeric' }),
-        amount: mrr,
-        status: 'upcoming',
-        due_date: d.toISOString().split('T')[0],
-      });
-    }
-
-    res.json({ business_name: biz.name, mrr, plan_services: JSON.parse(biz.plan_services || '[]'), invoices });
+  // Current month (due)
+  invoices.push({
+    id: 'inv-current',
+    period: now.toLocaleString('default', { month: 'long', year: 'numeric' }),
+    amount: mrr,
+    status: 'due',
+    due_date: new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0],
   });
+
+  // Next 2 months (upcoming)
+  for (let i = 1; i <= 2; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    invoices.push({
+      id: 'inv-upcoming-' + i,
+      period: d.toLocaleString('default', { month: 'long', year: 'numeric' }),
+      amount: mrr,
+      status: 'upcoming',
+      due_date: d.toISOString().split('T')[0],
+    });
+  }
+
+  res.json({ business_name: biz.name, mrr, plan_services: JSON.parse(biz.plan_services || '[]'), invoices });
 });
 
 
@@ -630,10 +681,13 @@ app.get('/api/super/businesses/:id/invoices', auth, superadminOnly, (req, res) =
 app.post('/api/reset-credentials-temp-8x92', (req, res) => {
   const adminHash = bcrypt.hashSync('PeachStack$105', 10);
   const demoHash  = bcrypt.hashSync('demo1234', 10);
-  db.run("UPDATE users SET password=? WHERE email='admin@peachstack.dev'", [adminHash]);
-  db.run("UPDATE users SET password=? WHERE email='priya@luxethreading.com'", [demoHash], (err) => {
-    res.json({ ok: true, error: err ? err.message : null });
-  });
+  try {
+    db.prepare("UPDATE users SET password=? WHERE email='admin@peachstack.dev'").run(adminHash);
+    db.prepare("UPDATE users SET password=? WHERE email='priya@luxethreading.com'").run(demoHash);
+    res.json({ ok: true, error: null });
+  } catch (err: any) {
+    res.json({ ok: false, error: err?.message || 'Failed' });
+  }
 });
 
 app.listen(PORT, "0.0.0.0", () => {
