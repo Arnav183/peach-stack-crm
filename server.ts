@@ -37,6 +37,22 @@ const DEFAULT_SERVICE_SET = [
   { name: "Upper Lip Threading", duration: 15, price: 12, category: "Beauty" },
   { name: "Chin Threading", duration: 15, price: 12, category: "Beauty" },
 ];
+const QUOTE_SERVICE_CATALOG = [
+  { id: "crm", name: "CRM Dashboard", category: "Core", free_option: "Built-in (no external API needed)" },
+  { id: "onboarding", name: "Onboarding & Data Setup", category: "Core", free_option: "Built-in checklist/import flow" },
+  { id: "website-basic", name: "Basic Website (5 pages)", category: "Website", free_option: "Use static hosting free tiers (Cloudflare Pages / Netlify)" },
+  { id: "website-custom", name: "Custom Website", category: "Website", free_option: "Use static hosting free tiers (Cloudflare Pages / Netlify)" },
+  { id: "seo", name: "Local SEO Setup", category: "Website", free_option: "No API required; use checklist + GBP manually" },
+  { id: "booking", name: "Online Booking Calendar", category: "Bookings", free_option: "Built-in webhook ingestion (no paid API required)" },
+  { id: "reminders", name: "Appointment Reminders", category: "Bookings", free_option: "Resend free tier for email; SMS can stay in test mode" },
+  { id: "ai-phone", name: "AI Phone Agent", category: "AI", free_option: "Use test simulation mode; optional telephony trial credits for live calls" },
+  { id: "ai-chat", name: "AI Website Chat Widget", category: "AI", free_option: "Use embedded local test widget endpoint" },
+  { id: "ai-followup", name: "Auto Follow-up Sequences", category: "AI", free_option: "Run built-in follow-up simulation" },
+  { id: "reviews", name: "Review Management", category: "Marketing", free_option: "Use direct review-link workflow (no API required)" },
+  { id: "email-sms", name: "Email & SMS Marketing", category: "Marketing", free_option: "Resend free tier for email; SMS test simulation" },
+  { id: "social", name: "Social Media Templates", category: "Marketing", free_option: "Use Canva free template workflow" },
+  { id: "priority-support", name: "Priority Support", category: "Support", free_option: "Built-in support queue process" },
+];
 
 function generateTempPassword() {
   return Array.from({ length: TEMP_PASSWORD_LENGTH }, () => TEMP_PASSWORD_CHARS[Math.floor(Math.random() * TEMP_PASSWORD_CHARS.length)]).join("");
@@ -45,7 +61,7 @@ function generateTempPassword() {
 function toISODateTime(value: any) {
   if (value === null || value === undefined || value === "") return null;
   if (typeof value === "number") {
-    // Excel serial date conversion: 25569 converts standard Excel serial values (1900 date system) to Unix epoch milliseconds.
+    // Excel serial date conversion: 25569 is the day offset between Excel's 1900 epoch and Unix epoch (1970-01-01).
     // Note: this simple conversion targets normal modern business dates and does not special-case pre-1900 edge cases.
     const date = new Date(Math.round((value - 25569) * 86400 * 1000));
     return Number.isNaN(date.getTime()) ? null : date.toISOString();
@@ -256,7 +272,7 @@ const migrations = [
   "ALTER TABLE invoices ADD COLUMN client_id INTEGER",
 ];
 for (const m of migrations) { try { db.exec(m); } catch(e) {} }
-try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_businesses_booking_webhook_key ON businesses(booking_webhook_key)"); } catch (e) {}
+try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_businesses_booking_webhook_key ON businesses(booking_webhook_key)"); } catch (e) { console.warn("Could not ensure booking webhook index; continuing without index may reduce lookup performance:", e); }
 try {
   const businesses = db.prepare("SELECT id, settings, booking_webhook_key FROM businesses").all() as any[];
   const updateKey = db.prepare("UPDATE businesses SET booking_webhook_key=? WHERE id=?");
@@ -341,8 +357,7 @@ async function startServer() {
   };
 
   const importIntegrationAppointment = (webhookKey: string, payload: any, source: "booking" | "website") => {
-    const indexedBiz = db.prepare("SELECT id, settings, plan_services FROM businesses WHERE booking_webhook_key=? LIMIT 1").get(webhookKey) as any;
-    let biz = indexedBiz || null;
+    const biz = db.prepare("SELECT id, settings, plan_services FROM businesses WHERE booking_webhook_key=? LIMIT 1").get(webhookKey) as any;
     if (!biz) return { status: 404, body: { error: "Invalid key" } };
     const planServices = parsePlanServices(biz.plan_services);
     if (!hasPlanService(planServices, "booking")) {
@@ -575,8 +590,7 @@ async function startServer() {
     }
     if (settings.bookingWebhookKey !== webhookKey || biz.booking_webhook_key !== webhookKey) {
       settings.bookingWebhookKey = webhookKey;
-      db.prepare("UPDATE businesses SET settings=? WHERE id=?").run(JSON.stringify(settings), req.user.business_id);
-      db.prepare("UPDATE businesses SET booking_webhook_key=? WHERE id=?").run(webhookKey, req.user.business_id);
+      db.prepare("UPDATE businesses SET settings=?, booking_webhook_key=? WHERE id=?").run(JSON.stringify(settings), webhookKey, req.user.business_id);
     }
     const baseUrl = `${req.protocol}://${req.get("host")}`;
     res.json({
@@ -913,6 +927,47 @@ async function startServer() {
   app.delete("/api/accounts/:id", auth, businessOnly, scopeCheck, (req: any, res) => {
     db.prepare("DELETE FROM users WHERE id=? AND business_id=? AND role='customer'").run(req.params.id, req.user.business_id);
     res.json({ ok: true });
+  });
+
+  // Quote Builder service entitlements and no-cost test actions
+  app.get("/api/business/entitlements", auth, businessOnly, scopeCheck, businessReadRateLimit, (req: any, res) => {
+    const biz = db.prepare("SELECT plan_services FROM businesses WHERE id=?").get(req.user.business_id) as any;
+    const planServices = parsePlanServices(biz?.plan_services);
+    const entitlements = QUOTE_SERVICE_CATALOG.map((svc) => ({
+      ...svc,
+      unlocked: hasPlanService(planServices, svc.id),
+    }));
+    res.json({ entitlements });
+  });
+  app.post("/api/business/service-tests/:serviceId", auth, businessOnly, scopeCheck, businessWriteRateLimit, (req: any, res) => {
+    const serviceId = String(req.params.serviceId || "").trim();
+    const biz = db.prepare("SELECT id, plan_services, name, owner_email FROM businesses WHERE id=?").get(req.user.business_id) as any;
+    if (!biz) return res.status(404).json({ error: "Not found" });
+    const planServices = parsePlanServices(biz.plan_services);
+    if (!hasPlanService(planServices, serviceId)) return res.status(403).json({ error: "Service is locked for this plan" });
+
+    const testEmail = process.env.SERVICE_TEST_EMAIL || biz.owner_email || "owner@example.com";
+    const mode = process.env.SERVICE_STUB_MODE || "simulation";
+    const base = { ok: true, serviceId, business: biz.name, mode, testedAt: new Date().toISOString() };
+    const canned: Record<string, any> = {
+      crm: { ...base, message: "CRM core is active (clients, appointments, invoices, revenue)." },
+      onboarding: { ...base, message: "Onboarding checklist generated. Import template flows are ready." },
+      "website-basic": { ...base, message: "Basic website package test ready. Suggested free host: Cloudflare Pages." },
+      "website-custom": { ...base, message: "Custom website package test ready. Suggested free host: Netlify or Cloudflare Pages." },
+      seo: { ...base, message: "SEO checklist test generated (Google Business Profile, keywords, citations)." },
+      booking: { ...base, message: "Booking integration active. Use webhook URL from Settings to ingest bookings." },
+      reminders: { ...base, message: `Reminder test queued in ${mode} mode. Free option: Resend for email to ${testEmail}.` },
+      "ai-phone": { ...base, message: "AI phone simulation test created (no telephony bill in simulation mode)." },
+      "ai-chat": { ...base, message: "AI chat widget simulation is active for testing." },
+      "ai-followup": { ...base, message: "AI follow-up sequence simulation queued for latest customer." },
+      reviews: { ...base, message: "Review request simulation sent using direct review-link workflow." },
+      "email-sms": { ...base, message: `Campaign test queued in ${mode} mode. Free option: Resend email to ${testEmail}.` },
+      social: { ...base, message: "Social templates package test ready. Free option: Canva free templates." },
+      "priority-support": { ...base, message: "Priority support routing simulation successful." },
+    };
+    const payload = canned[serviceId];
+    if (!payload) return res.status(400).json({ error: "Unknown service" });
+    res.json(payload);
   });
 
   // PORTAL (customer-facing)
