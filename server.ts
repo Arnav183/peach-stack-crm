@@ -139,6 +139,7 @@ const SERVICE_TEMPLATE_CATALOG: Record<string, { name: string; checklist: string
     defaults: { responseSla: "same-day" },
   },
 };
+const EMPTY_SETTINGS_JSON = "{}";
 
 function generateTempPassword() {
   return Array.from({ length: TEMP_PASSWORD_LENGTH }, () => TEMP_PASSWORD_CHARS[Math.floor(Math.random() * TEMP_PASSWORD_CHARS.length)]).join("");
@@ -178,10 +179,9 @@ function hasPlanService(planServices: string[], serviceId: string) {
 
 function normalizePlanServices(raw: any): string[] {
   const allowed = new Set(QUOTE_SERVICE_CATALOG.map((svc) => svc.id));
-  const incoming = Array.isArray(raw) ? raw.map(String) : [];
+  const incoming = parsePlanServices(raw);
   const normalized = Array.from(new Set(incoming.filter((id) => allowed.has(id))));
-  if (!normalized.includes("crm")) normalized.unshift("crm");
-  return normalized;
+  return normalized.includes("crm") ? normalized : ["crm", ...normalized];
 }
 
 function buildServiceTemplate(serviceId: string, business: { name?: string; industry?: string }) {
@@ -616,10 +616,10 @@ async function startServer() {
     const tempPw = generateTempPassword();
     const services = normalizePlanServices(plan_services);
     const calculatedMrr = services.reduce((sum: number, id: string) => sum + (MONTHLY_SERVICE_PRICING[id] || 0), 0);
-    const settingsWithTemplates = applyServiceTemplates("{}", { name, industry }, services, true);
+    const initialSettings = applyServiceTemplates(EMPTY_SETTINGS_JSON, { name, industry }, services, true);
     const tx = db.transaction(() => {
       const insertBusiness = db.prepare(
-        "INSERT INTO businesses (name,industry,owner_name,owner_email,phone,plan,mrr,plan_services,status,settings) VALUES (@name,@industry,@owner_name,@owner_email,@phone,@plan,@mrr,@plan_services,@status,@settings)"
+        "INSERT INTO businesses (name, industry, owner_name, owner_email, phone, plan, mrr, plan_services, status, settings) VALUES (@name, @industry, @owner_name, @owner_email, @phone, @plan, @mrr, @plan_services, @status, @settings)"
       );
       const biz = insertBusiness.run({
         name,
@@ -631,7 +631,7 @@ async function startServer() {
         mrr: Number(mrr) > 0 ? Number(mrr) : calculatedMrr,
         plan_services: JSON.stringify(services),
         status: "active",
-        settings: JSON.stringify(settingsWithTemplates),
+        settings: JSON.stringify(initialSettings),
       });
       db.prepare("INSERT INTO users (email,password,role,business_id,name,must_change_password) VALUES (?,?,'business_admin',?,?,1)").run(owner_email.toLowerCase(), bcrypt.hashSync(tempPw, 12), biz.lastInsertRowid, owner_name||"");
       return { id: biz.lastInsertRowid, tempPw };
@@ -1129,7 +1129,9 @@ async function startServer() {
 // ── Plan & Invoice routes ─────────────────────────────────────────────────────
 
 // Update a business plan_services and recalculate mrr
-app.put('/api/super/businesses/:id/plan', auth, superadminOnly, (req, res) => {
+app.put('/api/super/businesses/:id/plan', auth, superadminOnly, createRouteRateLimiter("superadmin_plan_write", 60, 60 * 1000), (req, res) => {
+  const planRateLimit = checkIntegrationRateLimit(`superadmin-plan:${req.user?.id || "anon"}:${req.ip || "unknown"}`);
+  if (!planRateLimit.allowed) return res.status(429).json({ error: `Too many requests. Try again in ${planRateLimit.retryAfter}s` });
   const { plan_services } = req.body; // array of service IDs
   if (!Array.isArray(plan_services)) return res.status(400).json({ error: 'plan_services must be an array' });
   const biz = db.prepare("SELECT id, name, industry, settings FROM businesses WHERE id=?").get(req.params.id) as any;
@@ -1147,17 +1149,19 @@ app.put('/api/super/businesses/:id/plan', auth, superadminOnly, (req, res) => {
   }
 });
 
-app.post("/api/super/businesses/:id/templates/:serviceId/apply", auth, superadminOnly, (req, res) => {
+app.post("/api/super/businesses/:id/templates/:serviceId/apply", auth, superadminOnly, createRouteRateLimiter("superadmin_template_apply", 60, 60 * 1000), (req, res) => {
+  const templateRateLimit = checkIntegrationRateLimit(`superadmin-template:${req.user?.id || "anon"}:${req.ip || "unknown"}`);
+  if (!templateRateLimit.allowed) return res.status(429).json({ error: `Too many requests. Try again in ${templateRateLimit.retryAfter}s` });
   const serviceId = String(req.params.serviceId || "").trim();
   if (!SERVICE_TEMPLATE_CATALOG[serviceId]) return res.status(400).json({ error: "Unknown service" });
   const force = Boolean(req.body?.force);
   const biz = db.prepare("SELECT id, name, industry, settings, plan_services FROM businesses WHERE id=?").get(req.params.id) as any;
   if (!biz) return res.status(404).json({ error: "Business not found" });
-  const existingServices = normalizePlanServices(parsePlanServices(biz.plan_services));
+  const existingServices = normalizePlanServices(biz.plan_services);
   const nextServices = Array.from(new Set([...existingServices, serviceId]));
   const nextSettings = applyServiceTemplates(biz.settings, { name: biz.name, industry: biz.industry }, [serviceId], force);
   const mrr = nextServices.reduce((sum: number, id: string) => sum + (MONTHLY_SERVICE_PRICING[id] || 0), 0);
-  db.prepare("UPDATE businesses SET plan_services=?, mrr=?, settings=? WHERE id=?")
+  db.prepare("UPDATE businesses SET plan_services = ?, mrr = ?, settings = ? WHERE id = ?")
     .run(JSON.stringify(nextServices), mrr, JSON.stringify(nextSettings), req.params.id);
   const template = nextSettings?.serviceTemplates?.[serviceId] || null;
   res.json({ success: true, serviceId, mrr, plan_services: nextServices, settings: nextSettings, template });

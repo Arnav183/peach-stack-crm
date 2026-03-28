@@ -120,20 +120,30 @@ export default function SuperBusinessDetail() {
     setSaving(false);
   };
 
-  const applyTemplate = async (serviceId) => {
+  const applyTemplate = async (serviceId: string) => {
     setSaveMsg('');
     setApplyingTemplate(serviceId);
     try {
-      const res = await fetch('/api/super/businesses/' + id + '/templates/' + serviceId + '/apply', {
+      const res = await fetch(`/api/super/businesses/${id}/templates/${serviceId}/apply`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ force: true }),
       });
       const data = await res.json();
       if (res.ok && data?.success) {
-        setBiz(prev => prev ? { ...prev, mrr: data.mrr, plan_services: JSON.stringify(data.plan_services || []), settings: JSON.stringify(data.settings || {}) } : prev);
-        setDraftServices(new Set(data.plan_services || []));
-        setSaveMsg('Template applied for ' + (SERVICES.find(s => s.id === serviceId)?.name || serviceId) + '.');
+        const nextPlanServices = Array.isArray(data.plan_services) ? data.plan_services : [];
+        const nextSettings = data.settings && typeof data.settings === 'object' ? data.settings : {};
+        setBiz(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            mrr: data.mrr,
+            plan_services: JSON.stringify(nextPlanServices),
+            settings: JSON.stringify(nextSettings),
+          };
+        });
+        setDraftServices(new Set(nextPlanServices));
+        setSaveMsg(`Template applied for ${SERVICES.find(s => s.id === serviceId)?.name || serviceId}.`);
       } else {
         setSaveMsg(data?.error || 'Could not apply template.');
       }
