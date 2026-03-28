@@ -29,8 +29,20 @@ export default function Appointments() {
   const [form, setForm] = useState({ client_id: "", service: "Brow Threading", staff: "Arnav", date: "", duration: "60", price: "", tip: "0", status: "Confirmed", notes: "", is_walkin: false });
   const [saving, setSaving] = useState(false);
   const [importResult, setImportResult] = useState<{ success?: string; error?: string } | null>(null);
+  const [planServices, setPlanServices] = useState<string[]>([]);
 
-  const load = () => {
+  const hasCRM = planServices.includes("crm");
+  const loadPlan = () => {
+    fetch("/api/business/profile").then(r => r.json()).then((d) => {
+      try {
+        const parsed = JSON.parse(d.plan_services || "[]");
+        setPlanServices(Array.isArray(parsed) ? parsed : []);
+      } catch {
+        setPlanServices([]);
+      }
+    }).catch(() => setPlanServices([]));
+  };
+  const loadData = () => {
     Promise.all([
       fetch("/api/appointments").then(r=>r.json()),
       fetch("/api/clients").then(r=>r.json()),
@@ -41,7 +53,7 @@ export default function Appointments() {
       setServices(Array.isArray(s) ? s : []);
     }).finally(() => setLoading(false));
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { loadPlan(); loadData(); }, []);
   useEffect(() => {
     if (!services.length) return;
     setForm((prev) => {
@@ -78,7 +90,7 @@ export default function Appointments() {
     e.preventDefault(); setSaving(true);
     const body = { ...form, client_id: form.is_walkin ? null : parseInt(form.client_id) || null, duration: parseInt(form.duration), price: parseFloat(form.price), tip: parseFloat(form.tip) || 0, is_walkin: form.is_walkin ? 1 : 0 };
     const res = await fetch("/api/appointments", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body) });
-    if (res.ok) { setShowModal(false); load(); setForm({ client_id:"", service:"Brow Threading", staff:"Arnav", date:"", duration:"60", price:"", tip:"0", status:"Confirmed", notes:"", is_walkin:false }); }
+    if (res.ok) { setShowModal(false); loadData(); setForm({ client_id:"", service:"Brow Threading", staff:"Arnav", date:"", duration:"60", price:"", tip:"0", status:"Confirmed", notes:"", is_walkin:false }); }
     setSaving(false);
   };
 
@@ -99,6 +111,7 @@ export default function Appointments() {
     try {
       const data = await file.arrayBuffer();
       const wb = XLSX.read(data);
+      if (!wb.SheetNames?.length) throw new Error("Invalid file format or empty spreadsheet");
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows: any[] = XLSX.utils.sheet_to_json(ws);
       const mapped = rows.map((r) => ({
@@ -122,8 +135,9 @@ export default function Appointments() {
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || "Import failed");
       setImportResult({ success: `Imported ${result.imported} appointments.` });
-      load();
-    } catch {
+      loadData();
+    } catch (error) {
+      console.error("Appointments import failed:", error);
       setImportResult({ error: "Import failed. Use the template format and valid date/time values." });
     }
     e.target.value = "";
@@ -167,10 +181,16 @@ export default function Appointments() {
           <button onClick={downloadTemplate} className="flex items-center gap-2 px-4 py-2.5 border border-slate-200 bg-white text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-50">
             <Download className="w-4 h-4" /> Template
           </button>
-          <label className="flex items-center gap-2 px-4 py-2.5 border border-slate-200 bg-white text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-50 cursor-pointer">
-            <Upload className="w-4 h-4" /> Import
-            <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImport} />
-          </label>
+          {hasCRM ? (
+            <label className="flex items-center gap-2 px-4 py-2.5 border border-slate-200 bg-white text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-50 cursor-pointer">
+              <Upload className="w-4 h-4" /> Import
+              <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImport} />
+            </label>
+          ) : (
+            <button disabled className="flex items-center gap-2 px-4 py-2.5 border border-slate-200 bg-slate-100 text-slate-400 rounded-xl text-sm font-bold cursor-not-allowed">
+              <Upload className="w-4 h-4" /> Import (CRM plan required)
+            </button>
+          )}
           <button onClick={() => setShowModal(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-bold hover:bg-orange-400 shadow-lg shadow-orange-500/20">
             <Plus className="w-4 h-4" /> New Appointment
@@ -182,6 +202,11 @@ export default function Appointments() {
           {importResult.success ? <Check className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
           {importResult.success || importResult.error}
           <button onClick={() => setImportResult(null)} className="ml-auto"><X className="w-4 h-4" /></button>
+        </div>
+      )}
+      {!hasCRM && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800">
+          Import and service controls are unlocked when <strong>CRM Dashboard</strong> is included in this business plan.
         </div>
       )}
 

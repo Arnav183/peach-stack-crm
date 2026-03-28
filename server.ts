@@ -45,7 +45,8 @@ function generateTempPassword() {
 function toISODateTime(value: any) {
   if (value === null || value === undefined || value === "") return null;
   if (typeof value === "number") {
-    // Excel serial date conversion: 25569 is the day offset from Excel's 1900 date system to Unix epoch (1970-01-01), including Excel's 1900 leap-year bug handling.
+    // Excel serial date conversion: 25569 converts standard Excel serial values (1900 date system) to Unix epoch milliseconds.
+    // Note: this simple conversion targets normal modern business dates and does not special-case pre-1900 edge cases.
     const date = new Date(Math.round((value - 25569) * 86400 * 1000));
     return Number.isNaN(date.getTime()) ? null : date.toISOString();
   }
@@ -56,6 +57,21 @@ function toISODateTime(value: any) {
 function parseBusinessSettings(raw: any) {
   if (!raw) return {};
   try { return JSON.parse(raw); } catch { return {}; }
+}
+
+function parsePlanServices(raw: any): string[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw.map(String);
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+function hasPlanService(planServices: string[], serviceId: string) {
+  return planServices.includes(serviceId);
 }
 
 // Rate limiting store (in-memory, per IP)
@@ -241,6 +257,23 @@ const migrations = [
 ];
 for (const m of migrations) { try { db.exec(m); } catch(e) {} }
 try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_businesses_booking_webhook_key ON businesses(booking_webhook_key)"); } catch (e) {}
+try {
+  const businesses = db.prepare("SELECT id, settings, booking_webhook_key FROM businesses").all() as any[];
+  const updateKey = db.prepare("UPDATE businesses SET booking_webhook_key=? WHERE id=?");
+  const backfill = db.transaction((rows: any[]) => {
+    let updated = 0;
+    for (const row of rows) {
+      if (row.booking_webhook_key) continue;
+      const settings = parseBusinessSettings(row.settings);
+      if (settings.bookingWebhookKey) {
+        updateKey.run(String(settings.bookingWebhookKey), row.id);
+        updated++;
+      }
+    }
+    return updated;
+  });
+  backfill(businesses);
+} catch (e) {}
 
 async function startServer() {
   const app = express();
@@ -308,19 +341,13 @@ async function startServer() {
   };
 
   const importIntegrationAppointment = (webhookKey: string, payload: any, source: "booking" | "website") => {
-    const indexedBiz = db.prepare("SELECT id, settings FROM businesses WHERE booking_webhook_key=? LIMIT 1").get(webhookKey) as any;
+    const indexedBiz = db.prepare("SELECT id, settings, plan_services FROM businesses WHERE booking_webhook_key=? LIMIT 1").get(webhookKey) as any;
     let biz = indexedBiz || null;
-    if (!biz) {
-      // Backward compatibility: older rows may only have key in JSON settings.
-      biz = db.prepare("SELECT id,settings FROM businesses").all().find((b: any) => {
-        const settings = parseBusinessSettings(b.settings);
-        return settings.bookingWebhookKey === webhookKey;
-      }) as any;
-      if (biz) {
-        db.prepare("UPDATE businesses SET booking_webhook_key=? WHERE id=?").run(webhookKey, biz.id);
-      }
-    }
     if (!biz) return { status: 404, body: { error: "Invalid key" } };
+    const planServices = parsePlanServices(biz.plan_services);
+    if (!hasPlanService(planServices, "booking")) {
+      return { status: 403, body: { error: "Booking integration is not enabled for this plan" } };
+    }
     const p: any = payload || {};
     const mapped = {
       client_name: p.client_name || p.name || p.customer_name || p.invitee_name || p.contact?.name || p.event?.invitee_name || "",
@@ -347,7 +374,7 @@ async function startServer() {
         clientId = existing.id;
       } else {
         const created = db.prepare("INSERT INTO clients (business_id,name,email,phone,notes,status) VALUES (?,?,?,?,?,?)")
-          .run(biz.id, clientName || clientEmail, clientEmail, String(mapped.client_phone || ""), "Imported from booking integration", "New");
+          .run(biz.id, clientName || clientEmail, clientEmail, String(mapped.client_phone || ""), `Imported from ${source} integration`, "New");
         clientId = Number(created.lastInsertRowid);
       }
     } else if (clientName) {
@@ -537,8 +564,10 @@ async function startServer() {
 
   // Integrations/settings helper for import/webhook flows
   const getIntegrationConfig = (req: any, res: any) => {
-    const biz = db.prepare("SELECT id, settings FROM businesses WHERE id=?").get(req.user.business_id) as any;
+    const biz = db.prepare("SELECT id, settings, plan_services FROM businesses WHERE id=?").get(req.user.business_id) as any;
     if (!biz) return res.status(404).json({ error: "Not found" });
+    const planServices = parsePlanServices(biz.plan_services);
+    if (!hasPlanService(planServices, "booking")) return res.status(403).json({ error: "Booking integration is not enabled for this plan" });
     const settings = parseBusinessSettings(biz.settings);
     let webhookKey = biz.booking_webhook_key || settings.bookingWebhookKey || "";
     if (!webhookKey) {
@@ -652,6 +681,9 @@ async function startServer() {
     res.json({ ok: true });
   });
   app.post("/api/clients/import", auth, businessOnly, scopeCheck, businessWriteRateLimit, (req: any, res) => {
+    const biz = db.prepare("SELECT plan_services FROM businesses WHERE id=?").get(req.user.business_id) as any;
+    const planServices = parsePlanServices(biz?.plan_services);
+    if (!hasPlanService(planServices, "crm")) return res.status(403).json({ error: "Client import requires CRM service in your plan" });
     const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
     const ins = db.prepare("INSERT INTO clients (business_id,name,email,phone,notes,status) VALUES (?,?,?,?,?,?)");
     const tx = db.transaction((items: any[]) => {
@@ -674,11 +706,15 @@ async function startServer() {
     res.json({ imported: tx(rows) });
   });
   app.get("/api/services", auth, businessOnly, scopeCheck, businessReadRateLimit, (req: any, res) => {
+    const biz = db.prepare("SELECT plan_services FROM businesses WHERE id=?").get(req.user.business_id) as any;
+    const planServices = parsePlanServices(biz?.plan_services);
+    if (!hasPlanService(planServices, "crm")) return res.status(403).json({ error: "Services require CRM service in your plan" });
     let rows = db.prepare("SELECT * FROM services WHERE business_id=? ORDER BY name ASC").all(req.user.business_id) as any[];
     if (!rows.length) {
       const ins = db.prepare("INSERT INTO services (business_id,name,duration,price,category) VALUES (?,?,?,?,?)");
       const seed = db.transaction(() => {
         for (const s of DEFAULT_SERVICE_SET) ins.run(req.user.business_id, s.name, s.duration, s.price, s.category);
+        return DEFAULT_SERVICE_SET.length;
       });
       seed();
       rows = db.prepare("SELECT * FROM services WHERE business_id=? ORDER BY name ASC").all(req.user.business_id) as any[];
@@ -686,6 +722,9 @@ async function startServer() {
     res.json(rows);
   });
   app.post("/api/services", auth, businessOnly, scopeCheck, businessWriteRateLimit, (req: any, res) => {
+    const biz = db.prepare("SELECT plan_services FROM businesses WHERE id=?").get(req.user.business_id) as any;
+    const planServices = parsePlanServices(biz?.plan_services);
+    if (!hasPlanService(planServices, "crm")) return res.status(403).json({ error: "Services require CRM service in your plan" });
     const name = String(req.body?.name || "").trim();
     if (!name) return res.status(400).json({ error: "Name required" });
     const duration = Math.max(MIN_DURATION_MINUTES, parseInt(req.body?.duration, 10) || 60);
@@ -720,6 +759,9 @@ async function startServer() {
     res.json({ ok: true });
   });
   app.post("/api/appointments/import", auth, businessOnly, scopeCheck, businessWriteRateLimit, (req: any, res) => {
+    const biz = db.prepare("SELECT plan_services FROM businesses WHERE id=?").get(req.user.business_id) as any;
+    const planServices = parsePlanServices(biz?.plan_services);
+    if (!hasPlanService(planServices, "crm")) return res.status(403).json({ error: "Appointment import requires CRM service in your plan" });
     const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
     const findClientByName = db.prepare("SELECT id FROM clients WHERE business_id=? AND lower(name)=lower(?) LIMIT 1");
     const findClientByEmail = db.prepare("SELECT id,name FROM clients WHERE business_id=? AND lower(email)=lower(?) LIMIT 1");
@@ -740,7 +782,7 @@ async function startServer() {
           let client = findClientByEmail.get(req.user.business_id, clientEmail) as any;
           if (!client) {
             const newName = clientName || clientEmail;
-            const inserted = addClient.run(req.user.business_id, newName, clientEmail, clientPhone, "Imported from booking/source", "New");
+            const inserted = addClient.run(req.user.business_id, newName, clientEmail, clientPhone, "Imported from appointments import", "New");
             clientId = Number(inserted.lastInsertRowid);
           } else {
             clientId = client.id;

@@ -26,13 +26,25 @@ export default function Clients() {
   const [activeMenu, setActiveMenu] = useState<number | null>(null);
   const [page, setPage] = useState(1);
   const [importResult, setImportResult] = useState<{ success?: string; error?: string } | null>(null);
+  const [planServices, setPlanServices] = useState<string[]>([]);
   const PER_PAGE = 15;
   const menuRef = useRef<HTMLDivElement>(null);
+  const hasCRM = planServices.includes("crm");
 
   const load = () => {
     fetch("/api/clients").then(r => r.json()).then(setClients).finally(() => setLoading(false));
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    fetch("/api/business/profile").then(r => r.json()).then((d) => {
+      try {
+        const parsed = JSON.parse(d.plan_services || "[]");
+        setPlanServices(Array.isArray(parsed) ? parsed : []);
+      } catch {
+        setPlanServices([]);
+      }
+    }).catch(() => setPlanServices([]));
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -102,6 +114,7 @@ export default function Clients() {
     try {
       const data = await file.arrayBuffer();
       const wb = XLSX.read(data);
+      if (!wb.SheetNames?.length) throw new Error("Invalid file format or empty spreadsheet");
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows: any[] = XLSX.utils.sheet_to_json(ws);
       const mapped = rows.map((r) => ({
@@ -120,7 +133,8 @@ export default function Clients() {
       if (!res.ok) throw new Error(result.error || "Import failed");
       setImportResult({ success: `Imported ${result.imported} clients.` });
       load();
-    } catch {
+    } catch (error) {
+      console.error("Clients import failed:", error);
       setImportResult({ error: "Import failed. Download the template and keep the same column headers." });
     }
     e.target.value = "";
@@ -167,10 +181,16 @@ export default function Clients() {
           <button onClick={downloadTemplate} className="flex items-center gap-2 px-4 py-2.5 border border-slate-200 bg-white rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50">
             <Download className="w-4 h-4" /> Template
           </button>
-          <label className="flex items-center gap-2 px-4 py-2.5 border border-slate-200 bg-white rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 cursor-pointer">
-            <Upload className="w-4 h-4" /> Import
-            <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImport} />
-          </label>
+          {hasCRM ? (
+            <label className="flex items-center gap-2 px-4 py-2.5 border border-slate-200 bg-white rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 cursor-pointer">
+              <Upload className="w-4 h-4" /> Import
+              <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImport} />
+            </label>
+          ) : (
+            <button disabled className="flex items-center gap-2 px-4 py-2.5 border border-slate-200 bg-slate-100 rounded-xl text-sm font-bold text-slate-400 cursor-not-allowed">
+              <Upload className="w-4 h-4" /> Import (CRM plan required)
+            </button>
+          )}
           <button onClick={() => setIsModalOpen(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-bold hover:bg-orange-400 transition-all shadow-lg shadow-orange-500/20">
             <Plus className="w-4 h-4" /> Add Client
@@ -182,6 +202,11 @@ export default function Clients() {
           {importResult.success ? <Check className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
           {importResult.success || importResult.error}
           <button onClick={() => setImportResult(null)} className="ml-auto"><X className="w-4 h-4" /></button>
+        </div>
+      )}
+      {!hasCRM && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800">
+          Client imports are unlocked when <strong>CRM Dashboard</strong> is included in this business plan.
         </div>
       )}
 

@@ -21,15 +21,32 @@ export default function Settings({ user }: SettingsProps) {
   const [savingPw, setSavingPw] = useState(false);
   const [importConfig, setImportConfig] = useState<{ bookingWebhookUrl: string; websiteImportUrl: string; bookingWebhookKey: string } | null>(null);
   const [copyMsg, setCopyMsg] = useState<string>("");
+  const [planServices, setPlanServices] = useState<string[]>([]);
+  const hasBooking = planServices.includes("booking");
 
   useEffect(() => {
     Promise.all([
-      fetch("/api/business/profile").then(r=>r.json()),
-      fetch("/api/business/import-config").then(r=>r.json()),
-    ]).then(([d, cfg]) => {
+      fetch("/api/business/profile").then(async (r) => {
+        let data: any = null;
+        try { data = await r.json(); } catch { data = null; }
+        return { ok: r.ok, data };
+      }),
+      fetch("/api/business/import-config").then(async (r) => {
+        let data: any = null;
+        try { data = await r.json(); } catch { data = null; }
+        return { ok: r.ok, data };
+      }).catch(() => ({ ok: false, data: null })),
+    ]).then(([profileRes, configRes]) => {
+      const d = profileRes.data || {};
       setBiz(d);
       setProfile({ name: d.name||"", owner_name: d.owner_name||"", phone: d.phone||"", address: d.address||"" });
-      if (!cfg.error) setImportConfig(cfg);
+      try {
+        const parsed = JSON.parse(d.plan_services || "[]");
+        setPlanServices(Array.isArray(parsed) ? parsed : []);
+      } catch {
+        setPlanServices([]);
+      }
+      if (configRes.ok && configRes.data && !configRes.data.error) setImportConfig(configRes.data);
     });
   }, []);
 
@@ -167,39 +184,45 @@ export default function Settings({ user }: SettingsProps) {
         </div>
 
         {/* Integrations */}
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center"><LinkIcon className="w-4 h-4 text-slate-500"/></div>
-            <div>
-              <h3 className="text-base font-bold text-slate-900">Import Integrations</h3>
-              <p className="text-xs text-slate-400">Use these endpoints for website forms and booking calendars.</p>
+        {hasBooking ? (
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center"><LinkIcon className="w-4 h-4 text-slate-500"/></div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Import Integrations</h3>
+                <p className="text-xs text-slate-400">Use these endpoints for website forms and booking calendars.</p>
+              </div>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                <p className="text-xs uppercase tracking-wide text-slate-400 font-bold mb-1">Booking Calendar Import URL</p>
+                <p className="text-sm font-mono break-all text-slate-700">{importConfig?.bookingWebhookUrl || "Loading..."}</p>
+                {importConfig?.bookingWebhookUrl && (
+                  <button onClick={() => copyText(importConfig.bookingWebhookUrl)} className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:text-orange-500">
+                    <Copy className="w-3.5 h-3.5" /> Copy URL
+                  </button>
+                )}
+              </div>
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                <p className="text-xs uppercase tracking-wide text-slate-400 font-bold mb-1">Website Import URL</p>
+                <p className="text-sm font-mono break-all text-slate-700">{importConfig?.websiteImportUrl || "Loading..."}</p>
+                {importConfig?.websiteImportUrl && (
+                  <button onClick={() => copyText(importConfig.websiteImportUrl)} className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:text-orange-500">
+                    <Copy className="w-3.5 h-3.5" /> Copy URL
+                  </button>
+                )}
+              </div>
+              <div className="bg-orange-50 border border-orange-100 rounded-xl p-4 text-sm text-orange-800">
+                <strong>Payload tip:</strong> send fields like <code className="bg-orange-100 px-1 rounded">client_name</code>, <code className="bg-orange-100 px-1 rounded">client_email</code>, <code className="bg-orange-100 px-1 rounded">service</code>, <code className="bg-orange-100 px-1 rounded">date</code>. New clients/services are created automatically if needed.
+              </div>
+              {copyMsg && <p className="text-xs font-semibold text-emerald-600">{copyMsg}</p>}
             </div>
           </div>
-          <div className="p-6 space-y-4">
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-              <p className="text-xs uppercase tracking-wide text-slate-400 font-bold mb-1">Booking Calendar Import URL</p>
-              <p className="text-sm font-mono break-all text-slate-700">{importConfig?.bookingWebhookUrl || "Loading..."}</p>
-              {importConfig?.bookingWebhookUrl && (
-                <button onClick={() => copyText(importConfig.bookingWebhookUrl)} className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:text-orange-500">
-                  <Copy className="w-3.5 h-3.5" /> Copy URL
-                </button>
-              )}
-            </div>
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-              <p className="text-xs uppercase tracking-wide text-slate-400 font-bold mb-1">Website Import URL</p>
-              <p className="text-sm font-mono break-all text-slate-700">{importConfig?.websiteImportUrl || "Loading..."}</p>
-              {importConfig?.websiteImportUrl && (
-                <button onClick={() => copyText(importConfig.websiteImportUrl)} className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:text-orange-500">
-                  <Copy className="w-3.5 h-3.5" /> Copy URL
-                </button>
-              )}
-            </div>
-            <div className="bg-orange-50 border border-orange-100 rounded-xl p-4 text-sm text-orange-800">
-              <strong>Payload tip:</strong> send fields like <code className="bg-orange-100 px-1 rounded">client_name</code>, <code className="bg-orange-100 px-1 rounded">client_email</code>, <code className="bg-orange-100 px-1 rounded">service</code>, <code className="bg-orange-100 px-1 rounded">date</code>. New clients/services are created automatically if needed.
-            </div>
-            {copyMsg && <p className="text-xs font-semibold text-emerald-600">{copyMsg}</p>}
+        ) : (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
+            <strong>Booking integration is locked.</strong> Add <strong>Online Booking Calendar</strong> in Quote Builder to unlock webhook import URLs.
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
