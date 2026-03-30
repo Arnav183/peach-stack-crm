@@ -1,6 +1,14 @@
 import { useState } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import PeachLogo from '../components/PeachLogo';
+import { CheckCircle2 } from 'lucide-react';
+
+const FEATURES = [
+  'Client management & appointment tracking',
+  'Revenue analytics & P&L reporting',
+  'Invoice creation & payment tracking',
+  'Business insights at a glance',
+];
 
 export default function Login() {
   const navigate = useNavigate();
@@ -38,47 +46,106 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-amber-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <div className="flex justify-center mb-4">
-            <PeachLogo size={48} />
+    <div className="min-h-screen flex">
+      {/* Left panel — dark branding */}
+      <div className="hidden lg:flex lg:w-1/2 bg-gray-900 flex-col justify-between p-12">
+        <div className="flex items-center gap-3">
+          <PeachLogo size={36} />
+          <div>
+            <div className="text-white font-bold text-lg leading-tight">Peach Stack</div>
+            <div className="text-gray-400 text-xs">CRM PLATFORM</div>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Welcome back</h1>
-          <p className="text-gray-500 text-sm mt-1">Sign in to your Peach Stack dashboard</p>
         </div>
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+
+        <div>
+          <h1 className="text-4xl font-bold text-white leading-tight mb-4">
+            Run your business<br />
+            <span className="text-orange-400">from one place.</span>
+          </h1>
+          <p className="text-gray-400 text-sm mb-8 leading-relaxed">
+            Everything a small business needs — clients, appointments,<br />
+            invoices, and revenue — all in one clean dashboard.
+          </p>
+          <div className="space-y-3">
+            {FEATURES.map(f => (
+              <div key={f} className="flex items-center gap-3">
+                <CheckCircle2 size={16} className="text-orange-400 flex-shrink-0" />
+                <span className="text-gray-300 text-sm">{f}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="text-gray-600 text-xs">
+          Peach Stack · Atlanta, GA · ship real.
+        </div>
+      </div>
+
+      {/* Right panel — login form */}
+      <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gray-50">
+        {/* Mobile logo */}
+        <div className="lg:hidden flex items-center gap-2 mb-8">
+          <PeachLogo size={32} />
+          <span className="font-bold text-gray-900 text-lg">Peach Stack</span>
+        </div>
+
+        <div className="w-full max-w-sm">
+          <div className="mb-8">
+            <h2 className="text-2xl font-bold text-gray-900">Welcome back</h2>
+            <p className="text-gray-500 text-sm mt-1">Sign in to your dashboard</p>
+          </div>
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Email</label>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">
+                Email Address
+              </label>
               <input
-                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
-                type="email" value={email} onChange={e => setEmail(e.target.value)}
-                required autoFocus placeholder="you@yourbusiness.com"
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required autoFocus
+                placeholder="you@yourbusiness.com"
+                className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition shadow-sm"
               />
             </div>
+
             <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Password</label>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">
+                Password
+              </label>
               <input
-                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
-                type="password" value={password} onChange={e => setPassword(e.target.value)}
-                required placeholder="••••••••"
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                placeholder="••••••••"
+                className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition shadow-sm"
               />
             </div>
+
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2.5">
-                <p className="text-red-600 text-xs">{error}</p>
+              <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+                <p className="text-red-600 text-sm">{error}</p>
               </div>
             )}
-            <button type="submit" disabled={loading}
-              className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-60 text-white font-semibold py-2.5 rounded-xl transition-colors text-sm">
-              {loading ? 'Signing in...' : 'Sign In'}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-orange-500 hover:bg-orange-600 active:bg-orange-700 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-all text-sm shadow-sm shadow-orange-200"
+            >
+              {loading ? 'Signing in...' : 'Sign In →'}
             </button>
           </form>
+
+          <p className="text-center text-xs text-gray-400 mt-8">
+            Need access? Contact{' '}
+            <a href="mailto:hello@peachstack.dev" className="text-orange-500 hover:underline">
+              hello@peachstack.dev
+            </a>
+          </p>
         </div>
-        <p className="text-center text-xs text-gray-400 mt-6">
-          Powered by <span className="font-semibold text-orange-500">Peach Stack</span> · Atlanta, GA
-        </p>
       </div>
     </div>
   );
