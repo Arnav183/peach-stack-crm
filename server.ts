@@ -70,8 +70,8 @@ const MONTHLY_SERVICE_PRICING: Record<string, number> = {
 const SERVICE_TEMPLATE_CATALOG: Record<string, { name: string; checklist: string[]; defaults: Record<string, any> }> = {
   crm: {
     name: "CRM Dashboard",
-    checklist: ["Import client list", "Set appointment defaults", "Confirm invoice branding", "Enable client portal access"],
-    defaults: { portalEnabled: true, invoiceBranding: "default" },
+    checklist: ["Import client list", "Set appointment defaults", "Confirm invoice branding", "Decide on client portal access (optional)"],
+    defaults: { portalEnabled: false, invoiceBranding: "default" },
   },
   onboarding: {
     name: "Onboarding & Data Setup",

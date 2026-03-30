@@ -74,7 +74,10 @@ export default function Accounts() {
   return (
     <div className="p-8 min-h-screen bg-slate-50 space-y-8">
       <div className="flex items-center justify-between">
-        <div><h1 className="text-2xl font-bold text-slate-900">Client Portal Accounts</h1><p className="text-slate-500 text-sm mt-1">Create and manage client login access.</p></div>
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Client Portal Accounts</h1>
+          <p className="text-slate-500 text-sm mt-1">Optional logins for clients to view appointments, invoices, and update profile details.</p>
+        </div>
         <button onClick={()=>{setShowModal(true);setCreateMsg(null);setLoginPw(genPw());}} disabled={withoutPortal.length===0}
           className="flex items-center gap-2 px-4 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-bold hover:bg-orange-400 transition-all shadow-lg shadow-orange-500/20 disabled:opacity-40">
           <Plus className="w-4 h-4"/>Create Portal Login
@@ -85,6 +88,9 @@ export default function Accounts() {
         {[{v:accounts.length,l:'Active Portals'},{v:clients.length-accounts.length,l:'Without Access'},{v:accounts.filter(a=>a.must_change_password).length,l:'Temp Password'}].map(s=>(
           <div key={s.l} className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm"><p className="text-2xl font-bold text-slate-900">{s.v}</p><p className="text-sm text-slate-400 mt-0.5">{s.l}</p></div>
         ))}
+      </div>
+      <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-xs text-blue-800">
+        Portal access is optional. Clients without logins can still be managed fully by your team inside the CRM.
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
