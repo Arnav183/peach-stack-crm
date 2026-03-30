@@ -13,7 +13,7 @@ import Database from "better-sqlite3";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// SECURITY: JWT secret must be set via env var in production — no insecure fallback
+// SECURITY: JWT secret must be set via env var in production â no insecure fallback
 if (!process.env.JWT_SECRET) {
   if (process.env.NODE_ENV === "production") {
     throw new Error("FATAL: JWT_SECRET environment variable is not set. Set it in Railway variables.");
@@ -269,19 +269,19 @@ function checkIntegrationRateLimit(key: string): { allowed: boolean; retryAfter?
 
 if (process.env.RESET_DB === "true" && existsSync(DB_PATH)) {
   unlinkSync(DB_PATH);
-  console.log("RESET_DB=true — deleted existing DB");
+  console.log("RESET_DB=true â deleted existing DB");
 } else if (existsSync(DB_PATH)) {
   try { const t = new Database(DB_PATH); t.prepare("SELECT 1").get(); t.close(); }
-  catch (e) { console.log("Corrupt DB — deleting"); unlinkSync(DB_PATH); }
+  catch (e) { console.log("Corrupt DB â deleting"); unlinkSync(DB_PATH); }
 }
 
 if (!existsSync(DB_PATH)) {
-  console.log("No DB found — running seed...");
+  console.log("No DB found â running seed...");
   try { execSync("npx tsx seed.ts", { stdio: "inherit", cwd: process.cwd() }); }
   catch (e) { console.error("Seed failed:", e); }
 }
 
-// ── Always sync credentials on every boot ────────────────────────────────────
+// ââ Always sync credentials on every boot ââââââââââââââââââââââââââââââââââââ
 // This runs regardless of whether DB existed, ensuring passwords always match env vars
 setTimeout(() => {
   try {
@@ -378,7 +378,7 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 `);
-// Migrations — keep existing data, add new columns safely
+// Migrations â keep existing data, add new columns safely
 const migrations = [
   "ALTER TABLE users ADD COLUMN business_id INTEGER REFERENCES businesses(id)",
   "ALTER TABLE users ADD COLUMN name TEXT",
@@ -421,7 +421,7 @@ try {
 
 async function startServer() {
   const app = express();
-  // Health check endpoint — must respond immediately for Railway
+  // Health check endpoint â must respond immediately for Railway
   app.get("/health", (_req, res) => {
     res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
   });
@@ -546,7 +546,7 @@ async function startServer() {
   };
 
   // --- AUTH ROUTES ---
-  // Business login — /api/auth/login
+  // Business login â /api/auth/login
   app.post("/api/auth/login", (req, res) => {
     const ip = req.ip || "unknown";
     const rl = checkRateLimit(ip);
@@ -563,7 +563,7 @@ async function startServer() {
     res.json({ user: { id: user.id, email: user.email, role: user.role, business_id: user.business_id, name: user.name, business_name: user.business_name, industry: user.industry, must_change_password: user.must_change_password } });
   });
 
-  // Superadmin login — /api/admin/login (separate endpoint, separate cookie name conceptually)
+  // Superadmin login â /api/admin/login (separate endpoint, separate cookie name conceptually)
   app.post("/api/admin/login", (req, res) => {
     const ip = req.ip || "unknown";
     const rl = checkRateLimit("admin_" + ip);
@@ -727,7 +727,7 @@ async function startServer() {
   app.get("/api/business/import-config", auth, businessOnly, scopeCheck, businessReadRateLimit, getIntegrationConfig); // backward compatible
   app.get("/api/business/integration-config", auth, businessOnly, scopeCheck, businessReadRateLimit, getIntegrationConfig);
 
-  // Stats — scoped
+  // Stats â scoped
   app.get("/api/stats", auth, businessOnly, scopeCheck, (req: any, res) => {
     const bid = req.user.business_id;
     const { startDate, endDate } = req.query;
@@ -782,7 +782,7 @@ async function startServer() {
     const top = db.prepare("SELECT c.id,c.name,c.email,c.status, COALESCE(sum(a.price+a.tip),0) as total_revenue, count(a.id) as visit_count FROM clients c LEFT JOIN appointments a ON a.client_id=c.id AND a.status='Completed' WHERE c.business_id=? GROUP BY c.id ORDER BY total_revenue DESC LIMIT 6").all(bid);
     res.json({ totalClients:tc, newClientsThisMonth:nm, totalRevenue, totalExpenses:te||0, netProfit:totalRevenue-(te||0), upcomingAppointments:ua, unpaidInvoices:ui.c, unpaidInvoicesTotal:ui.t, revenueByMonth:rbm, expensesByMonth:ebm, revenueByService:rbs, expensesByCategory:ebc, nextAppointments:na, topClients:top });
   });
-  // CLIENTS — scoped
+  // CLIENTS â scoped
   app.get("/api/clients", auth, businessOnly, scopeCheck, (req: any, res) => {
     const rows = (db.prepare("SELECT * FROM clients WHERE business_id=? ORDER BY name ASC").all(req.user.business_id) as any[]).map((c: any) => {
       const pu = db.prepare("SELECT id,email FROM users WHERE business_id=? AND role='customer' AND (client_id=? OR email=?)").get(req.user.business_id, c.id, c.email);
@@ -874,7 +874,7 @@ async function startServer() {
     const r = db.prepare("INSERT INTO services (business_id,name,duration,price,category) VALUES (?,?,?,?,?)").run(req.user.business_id, name, duration, price, category);
     res.json({ id: r.lastInsertRowid });
   });
-  // APPOINTMENTS — scoped
+  // APPOINTMENTS â scoped
   app.get("/api/appointments", auth, businessOnly, scopeCheck, (req: any, res) => {
     res.json(db.prepare("SELECT a.*, COALESCE(c.name,'Walk-in') as client_name FROM appointments a LEFT JOIN clients c ON a.client_id=c.id WHERE a.business_id=? ORDER BY a.date DESC").all(req.user.business_id));
   });
@@ -961,7 +961,7 @@ async function startServer() {
     res.status(result.status).json(result.body);
   });
 
-  // EXPENSES — scoped
+  // EXPENSES â scoped
   app.get("/api/expenses", auth, businessOnly, scopeCheck, (req: any, res) => {
     res.json(db.prepare("SELECT * FROM expenses WHERE business_id=? ORDER BY date DESC").all(req.user.business_id));
   });
@@ -986,7 +986,7 @@ async function startServer() {
     res.json({ imported: tx(rows) });
   });
 
-  // MANUAL REVENUE — scoped
+  // MANUAL REVENUE â scoped
   app.get("/api/revenue/manual", auth, businessOnly, scopeCheck, (req: any, res) => {
     res.json(db.prepare("SELECT * FROM manual_revenue WHERE business_id=? ORDER BY date DESC").all(req.user.business_id));
   });
@@ -1011,7 +1011,7 @@ async function startServer() {
     res.json({ imported: tx(rows) });
   });
 
-  // INVOICES — scoped
+  // INVOICES â scoped
   app.get("/api/invoices", auth, businessOnly, scopeCheck, (req: any, res) => {
     res.json(db.prepare("SELECT * FROM invoices WHERE business_id=? ORDER BY created_at DESC").all(req.user.business_id));
   });
@@ -1030,7 +1030,7 @@ async function startServer() {
     res.json({ ok: true });
   });
 
-  // ACCOUNTS (portal users) — scoped
+  // ACCOUNTS (portal users) â scoped
   app.get("/api/accounts", auth, businessOnly, scopeCheck, (req: any, res) => {
     res.json(db.prepare(`
       SELECT
@@ -1127,38 +1127,135 @@ async function startServer() {
     res.json(payload);
   });
 
+  // PORTAL (customer-facing)
 
 // ── ACCOUNT MANAGEMENT ────────────────────────────────────────────────────────
 app.put('/api/auth/update-profile', auth, (req: any, res: any) => {
   const { name, email } = req.body;
   if (!name || !email) return res.status(400).json({ error: 'Name and email required' });
-  // Check email not taken by another user
   const existing = db.prepare('SELECT id FROM users WHERE email = ? AND id != ?').get(email, req.user.id);
   if (existing) return res.status(400).json({ error: 'Email already in use' });
   db.prepare('UPDATE users SET name = ?, email = ? WHERE id = ?').run(name, email, req.user.id);
-  const updated = db.prepare('SELECT id, name, email, role FROM users WHERE id = ?').get(req.user.id);
-  res.json(updated);
+  res.json(db.prepare('SELECT id, name, email, role FROM users WHERE id = ?').get(req.user.id));
 });
-
 app.put('/api/auth/change-password', auth, (req: any, res: any) => {
   const { currentPassword, newPassword } = req.body;
   if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Both passwords required' });
-  if (newPassword.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  if (newPassword.length < 8) return res.status(400).json({ error: 'Min 8 characters' });
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id) as any;
-  if (!bcrypt.compareSync(currentPassword, user.password)) return res.status(401).json({ error: 'Current password is incorrect' });
-  const hash = bcrypt.hashSync(newPassword, 10);
-  db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hash, req.user.id);
+  if (!bcrypt.compareSync(currentPassword, user.password)) return res.status(401).json({ error: 'Current password incorrect' });
+  db.prepare('UPDATE users SET password = ? WHERE id = ?').run(bcrypt.hashSync(newPassword, 10), req.user.id);
   res.json({ ok: true });
 });
 
 
+    app.use(express.static(distPath, { index: false }));
+    app.get("*", (_req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
+    });
+  }
 
-// ── SERVE REACT FRONTEND ──────────────────────────────────────────────────────
-app.use(express.static(path.join(__dirname, 'dist')));
-app.get('*', (_req: any, res: any) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+  
+// ââ Plan & Invoice routes âââââââââââââââââââââââââââââââââââââââââââââââââââââ
+
+// Update a business plan_services and recalculate mrr
+app.put('/api/super/businesses/:id/plan', auth, superadminOnly, createRouteRateLimiter("superadmin_plan_write", 60, 60 * 1000), (req, res) => {
+  const planRateLimit = checkIntegrationRateLimit(`superadmin-plan:${req.user?.id || "anon"}:${req.ip || "unknown"}`);
+  if (!planRateLimit.allowed) return res.status(429).json({ error: `Too many requests. Try again in ${planRateLimit.retryAfter}s` });
+  const { plan_services } = req.body; // array of service IDs
+  if (!Array.isArray(plan_services)) return res.status(400).json({ error: 'plan_services must be an array' });
+  const biz = db.prepare("SELECT id, name, industry, settings FROM businesses WHERE id=?").get(req.params.id) as any;
+  if (!biz) return res.status(404).json({ error: "Business not found" });
+  const normalizedServices = normalizePlanServices(plan_services);
+  const mrr = normalizedServices.reduce((sum: number, id: string) => sum + (MONTHLY_SERVICE_PRICING[id] || 0), 0);
+  const nextSettings = applyServiceTemplates(biz.settings, { name: biz.name, industry: biz.industry }, normalizedServices, false);
+
+  try {
+    db.prepare('UPDATE businesses SET plan_services = ?, mrr = ?, settings = ? WHERE id = ?')
+      .run(JSON.stringify(normalizedServices), mrr, JSON.stringify(nextSettings), req.params.id);
+    res.json({ success: true, mrr, plan_services: normalizedServices, settings: nextSettings });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to save plan' });
+  }
 });
 
+app.post("/api/super/businesses/:id/templates/:serviceId/apply", auth, superadminOnly, createRouteRateLimiter("superadmin_template_apply", 60, 60 * 1000), (req, res) => {
+  const templateRateLimit = checkIntegrationRateLimit(`superadmin-template:${req.user?.id || "anon"}:${req.ip || "unknown"}`);
+  if (!templateRateLimit.allowed) return res.status(429).json({ error: `Too many requests. Try again in ${templateRateLimit.retryAfter}s` });
+  const serviceId = String(req.params.serviceId || "").trim();
+  if (!SERVICE_TEMPLATE_CATALOG[serviceId]) return res.status(400).json({ error: "Unknown service" });
+  const force = Boolean(req.body?.force);
+  const biz = db.prepare("SELECT id, name, industry, settings, plan_services FROM businesses WHERE id=?").get(req.params.id) as any;
+  if (!biz) return res.status(404).json({ error: "Business not found" });
+  const existingServices = normalizePlanServices(biz.plan_services);
+  const nextServices = Array.from(new Set([...existingServices, serviceId]));
+  const nextSettings = applyServiceTemplates(biz.settings, { name: biz.name, industry: biz.industry }, [serviceId], force);
+  const mrr = nextServices.reduce((sum: number, id: string) => sum + (MONTHLY_SERVICE_PRICING[id] || 0), 0);
+  db.prepare("UPDATE businesses SET plan_services = ?, mrr = ?, settings = ? WHERE id = ?")
+    .run(JSON.stringify(nextServices), mrr, JSON.stringify(nextSettings), req.params.id);
+  const template = nextSettings?.serviceTemplates?.[serviceId] || null;
+  res.json({ success: true, serviceId, mrr, plan_services: nextServices, settings: nextSettings, template });
+});
+
+// Get invoices for a business (last 3 months + next 3 months)
+app.get('/api/super/businesses/:id/invoices', auth, superadminOnly, (req, res) => {
+  const bizId = parseInt(req.params.id);
+  const biz = db.prepare('SELECT name, mrr, plan_services FROM businesses WHERE id = ?').get(bizId) as any;
+  if (!biz) return res.status(404).json({ error: 'Business not found' });
+
+  const mrr = biz.mrr || 0;
+  const now = new Date();
+  const invoices = [];
+
+  // Past 3 months (paid)
+  for (let i = 3; i >= 1; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    invoices.push({
+      id: 'inv-past-' + i,
+      period: d.toLocaleString('default', { month: 'long', year: 'numeric' }),
+      amount: mrr,
+      status: 'paid',
+      due_date: new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0],
+    });
+  }
+
+  // Current month (due)
+  invoices.push({
+    id: 'inv-current',
+    period: now.toLocaleString('default', { month: 'long', year: 'numeric' }),
+    amount: mrr,
+    status: 'due',
+    due_date: new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0],
+  });
+
+  // Next 2 months (upcoming)
+  for (let i = 1; i <= 2; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    invoices.push({
+      id: 'inv-upcoming-' + i,
+      period: d.toLocaleString('default', { month: 'long', year: 'numeric' }),
+      amount: mrr,
+      status: 'upcoming',
+      due_date: d.toISOString().split('T')[0],
+    });
+  }
+
+  res.json({ business_name: biz.name, mrr, plan_services: JSON.parse(biz.plan_services || '[]'), invoices });
+});
+
+
+// TEMP: one-time password reset â remove after use
+app.post('/api/reset-credentials-temp-8x92', (req, res) => {
+  const adminHash = bcrypt.hashSync('PeachStack$105', 10);
+  const demoHash  = bcrypt.hashSync('demo1234', 10);
+  try {
+    db.prepare("UPDATE users SET password=? WHERE email='admin@peachstack.dev'").run(adminHash);
+    db.prepare("UPDATE users SET password=? WHERE email='priya@luxethreading.com'").run(demoHash);
+    res.json({ ok: true, error: null });
+  } catch (err: any) {
+    res.json({ ok: false, error: err?.message || 'Failed' });
+  }
+});
 
 app.listen(PORT, "0.0.0.0", () => {
     console.log("Server running on port " + PORT);
