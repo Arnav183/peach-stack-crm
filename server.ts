@@ -325,6 +325,7 @@ db.exec(`
     password TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'business_admin',
     business_id INTEGER REFERENCES businesses(id) ON DELETE CASCADE,
+    client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
     name TEXT,
     must_change_password INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -382,6 +383,7 @@ const migrations = [
   "ALTER TABLE users ADD COLUMN business_id INTEGER REFERENCES businesses(id)",
   "ALTER TABLE users ADD COLUMN name TEXT",
   "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'business_admin'",
+  "ALTER TABLE users ADD COLUMN client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL",
   "ALTER TABLE users ADD COLUMN last_login DATETIME",
   "ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0",
   "ALTER TABLE businesses ADD COLUMN booking_webhook_key TEXT",
@@ -551,7 +553,7 @@ async function startServer() {
     if (!rl.allowed) return res.status(429).json({ error: "Too many attempts. Try again in " + rl.retryAfter + "s" });
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: "Email and password required" });
-    const user = db.prepare("SELECT u.*, b.name as business_name, b.industry FROM users u LEFT JOIN businesses b ON u.business_id = b.id WHERE u.email = ? AND u.role != 'superadmin'").get(email.toLowerCase().trim()) as any;
+    const user = db.prepare("SELECT u.*, b.name as business_name, b.industry FROM users u LEFT JOIN businesses b ON u.business_id = b.id WHERE lower(u.email) = ? AND u.role != 'superadmin'").get(email.toLowerCase().trim()) as any;
     if (!user || !bcrypt.compareSync(password, user.password)) return res.status(401).json({ error: "Invalid email or password" });
     resetRateLimit(ip);
     db.prepare("UPDATE users SET last_login=datetime('now') WHERE id=?").run(user.id);
@@ -568,7 +570,7 @@ async function startServer() {
     if (!rl.allowed) return res.status(429).json({ error: "Too many attempts" });
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: "Required" });
-    const user = db.prepare("SELECT * FROM users WHERE email = ? AND role = 'superadmin'").get(email.toLowerCase().trim()) as any;
+    const user = db.prepare("SELECT * FROM users WHERE lower(email) = ? AND role = 'superadmin'").get(email.toLowerCase().trim()) as any;
     if (!user || !bcrypt.compareSync(password, user.password)) return res.status(401).json({ error: "Invalid credentials" });
     resetRateLimit("admin_" + ip);
     db.prepare("UPDATE users SET last_login=datetime('now') WHERE id=?").run(user.id);
@@ -783,7 +785,7 @@ async function startServer() {
   // CLIENTS — scoped
   app.get("/api/clients", auth, businessOnly, scopeCheck, (req: any, res) => {
     const rows = (db.prepare("SELECT * FROM clients WHERE business_id=? ORDER BY name ASC").all(req.user.business_id) as any[]).map((c: any) => {
-      const pu = db.prepare("SELECT id,email FROM users WHERE business_id=? AND email=? AND role='customer'").get(req.user.business_id, c.email);
+      const pu = db.prepare("SELECT id,email FROM users WHERE business_id=? AND role='customer' AND (client_id=? OR email=?)").get(req.user.business_id, c.id, c.email);
       return { ...c, portal_user: pu || null };
     });
     res.json(rows);
@@ -799,7 +801,7 @@ async function startServer() {
     if (!client) return res.status(404).json({ error: "Not found" });
     const appointments = db.prepare("SELECT * FROM appointments WHERE client_id=? AND business_id=? ORDER BY date DESC").all(req.params.id, req.user.business_id);
     const invoices = db.prepare("SELECT * FROM invoices WHERE client_id=? AND business_id=? ORDER BY created_at DESC").all(req.params.id, req.user.business_id);
-    const portal_user = db.prepare("SELECT id,email,must_change_password FROM users WHERE business_id=? AND email=(SELECT email FROM clients WHERE id=?) AND role='customer'").get(req.user.business_id, req.params.id);
+    const portal_user = db.prepare("SELECT id,email,must_change_password FROM users WHERE business_id=? AND role='customer' AND (client_id=? OR email=(SELECT email FROM clients WHERE id=?))").get(req.user.business_id, req.params.id, req.params.id);
     res.json({ ...client as any, appointments, invoices, portal_user: portal_user || null });
   });
   app.put("/api/clients/:id", auth, businessOnly, scopeCheck, (req: any, res) => {
@@ -1030,15 +1032,47 @@ async function startServer() {
 
   // ACCOUNTS (portal users) — scoped
   app.get("/api/accounts", auth, businessOnly, scopeCheck, (req: any, res) => {
-    res.json(db.prepare("SELECT u.id,u.email,u.must_change_password,c.name as client_name,c.status as client_status FROM users u LEFT JOIN clients c ON c.email=u.email AND c.business_id=u.business_id WHERE u.business_id=? AND u.role='customer' ORDER BY c.name ASC").all(req.user.business_id));
+    res.json(db.prepare(`
+      SELECT
+        u.id,
+        u.email,
+        u.client_id,
+        u.must_change_password,
+        (
+          SELECT c.name
+          FROM clients c
+          WHERE c.business_id=u.business_id
+            AND (c.id=u.client_id OR (u.client_id IS NULL AND c.email=u.email))
+          ORDER BY CASE WHEN c.id=u.client_id THEN 0 ELSE 1 END, c.id ASC
+          LIMIT 1
+        ) as client_name,
+        (
+          SELECT c.status
+          FROM clients c
+          WHERE c.business_id=u.business_id
+            AND (c.id=u.client_id OR (u.client_id IS NULL AND c.email=u.email))
+          ORDER BY CASE WHEN c.id=u.client_id THEN 0 ELSE 1 END, c.id ASC
+          LIMIT 1
+        ) as client_status
+      FROM users u
+      WHERE u.business_id=? AND u.role='customer'
+      ORDER BY client_name ASC
+    `).all(req.user.business_id));
   });
   app.post("/api/accounts", auth, businessOnly, scopeCheck, (req: any, res) => {
     const { client_id, email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: "email and password required" });
-    if (db.prepare("SELECT id FROM users WHERE email=?").get(email)) return res.status(409).json({ error: "Email already exists" });
+    const normalizedEmail = String(email).toLowerCase().trim();
+    if (db.prepare("SELECT id FROM users WHERE email=?").get(normalizedEmail)) return res.status(409).json({ error: "Email already exists" });
     const client = db.prepare("SELECT * FROM clients WHERE id=? AND business_id=?").get(client_id, req.user.business_id) as any;
     if (!client) return res.status(404).json({ error: "Client not found" });
-    const r = db.prepare("INSERT INTO users (email,password,role,business_id,name,must_change_password) VALUES (?,?,'customer',?,?,1)").run(email, bcrypt.hashSync(password, 12), req.user.business_id, client.name);
+    const existingPortal = client.email
+      ? db.prepare("SELECT id FROM users WHERE business_id=? AND role='customer' AND (client_id=? OR email=?)").get(req.user.business_id, client.id, client.email)
+      : db.prepare("SELECT id FROM users WHERE business_id=? AND role='customer' AND client_id=?").get(req.user.business_id, client.id);
+    if (existingPortal) {
+      return res.status(409).json({ error: "Client already has portal access" });
+    }
+    const r = db.prepare("INSERT INTO users (email,password,role,business_id,client_id,name,must_change_password) VALUES (?,?,'customer',?,?,?,1)").run(normalizedEmail, bcrypt.hashSync(password, 12), req.user.business_id, client.id, client.name);
     res.json({ id: r.lastInsertRowid });
   });
   app.put("/api/accounts/:id", auth, businessOnly, scopeCheck, (req: any, res) => {
@@ -1096,7 +1130,11 @@ async function startServer() {
   // PORTAL (customer-facing)
   app.get("/api/portal/me", auth, (req: any, res) => {
     if (req.user.role !== "customer") return res.status(403).json({ error: "Customer only" });
-    const client = db.prepare("SELECT id,name,email,phone,status FROM clients WHERE email=? AND business_id=?").get(req.user.email, req.user.business_id) as any;
+    const portalUser = db.prepare("SELECT id, email, business_id, client_id FROM users WHERE id=? AND role='customer'").get(req.user.id) as any;
+    if (!portalUser) return res.status(404).json({ error: "Not found" });
+    const client = portalUser.client_id
+      ? db.prepare("SELECT id,name,email,phone,status FROM clients WHERE business_id=? AND id=?").get(req.user.business_id, portalUser.client_id) as any
+      : db.prepare("SELECT id,name,email,phone,status FROM clients WHERE business_id=? AND email=?").get(req.user.business_id, portalUser.email) as any;
     if (!client) return res.status(404).json({ error: "Not found" });
     const appointments = db.prepare("SELECT * FROM appointments WHERE client_id=? AND business_id=? ORDER BY date DESC").all(client.id, req.user.business_id);
     const invoices = db.prepare("SELECT * FROM invoices WHERE client_id=? AND business_id=? ORDER BY created_at DESC").all(client.id, req.user.business_id);
@@ -1108,7 +1146,11 @@ async function startServer() {
   app.put("/api/portal/profile", auth, (req: any, res) => {
     if (req.user.role !== "customer") return res.status(403).json({ error: "Customer only" });
     const { name, email, phone } = req.body;
-    const client = db.prepare("SELECT id FROM clients WHERE email=? AND business_id=?").get(req.user.email, req.user.business_id) as any;
+    const portalUser = db.prepare("SELECT id, email, business_id, client_id FROM users WHERE id=? AND role='customer'").get(req.user.id) as any;
+    if (!portalUser) return res.status(404).json({ error: "Not found" });
+    const client = portalUser.client_id
+      ? db.prepare("SELECT id FROM clients WHERE business_id=? AND id=?").get(req.user.business_id, portalUser.client_id) as any
+      : db.prepare("SELECT id FROM clients WHERE business_id=? AND email=?").get(req.user.business_id, portalUser.email) as any;
     if (client) db.prepare("UPDATE clients SET name=?,email=?,phone=? WHERE id=? AND business_id=?").run(name, email, phone, client.id, req.user.business_id);
     res.json({ ok: true });
   });
