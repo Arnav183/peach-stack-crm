@@ -103,7 +103,10 @@ export default function Clients() {
 
   const handleRevokeAccess = async (client: any) => {
     if (!window.confirm(`Revoke portal access for ${client.name}?`)) return;
-    if (!client?.portal_user?.id) return;
+    if (!client?.portal_user?.id) {
+      window.alert("No portal access found for this client.");
+      return;
+    }
     await fetch(`/api/accounts/${client.portal_user.id}`, { method: "DELETE" });
     load();
   };

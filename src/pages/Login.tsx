@@ -10,9 +10,10 @@ const FEATURES = [
   'Business insights at a glance',
 ];
 
-interface Props { onLogin: (user: any) => void; }
+type LoginUser = { role: string; [key: string]: unknown };
+interface LoginProps { onLogin: (user: LoginUser) => void; }
 
-export default function Login({ onLogin }: Props) {
+export default function Login({ onLogin }: LoginProps) {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -35,10 +36,10 @@ export default function Login({ onLogin }: Props) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Login failed');
-      onLogin(data.user);
       localStorage.setItem('token', data.token);
       localStorage.setItem('role', data.user.role);
       localStorage.setItem('businessId', String(data.user.businessId || ''));
+      onLogin(data.user);
       if (data.user.role === 'superadmin') navigate('/super');
       else navigate('/');
     } catch (err: any) {
