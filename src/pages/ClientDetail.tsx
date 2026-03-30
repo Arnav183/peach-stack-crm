@@ -155,7 +155,7 @@ export default function ClientDetail() {
           </div>
           <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
             <h3 className="text-base font-bold text-slate-900 mb-1">Portal Access</h3>
-            <p className="text-xs text-slate-400 mb-4">Client login to their personal portal</p>
+            <p className="text-xs text-slate-400 mb-4">Optional login so this client can view appointments/invoices and update profile details.</p>
             {portalMsg&&(<div className={"flex items-start gap-2 p-3 rounded-xl text-sm font-medium mb-4 "+(portalMsg.type==='success'?'bg-emerald-50 text-emerald-700 border border-emerald-100':'bg-red-50 text-red-600 border border-red-100')}>
               {portalMsg.type==='success'?<CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5"/>:<AlertCircle className="w-4 h-4 shrink-0 mt-0.5"/>}
               <span>{portalMsg.text}</span><button onClick={()=>setPortalMsg(null)} className="ml-auto"><X className="w-3.5 h-3.5"/></button>
