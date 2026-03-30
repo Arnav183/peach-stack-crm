@@ -1152,6 +1152,14 @@ app.put('/api/auth/change-password', auth, (req: any, res: any) => {
 });
 
 
+
+// ── SERVE REACT FRONTEND ──────────────────────────────────────────────────────
+app.use(express.static(path.join(__dirname, 'dist')));
+app.get('*', (_req: any, res: any) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+
+
 app.listen(PORT, "0.0.0.0", () => {
     console.log("Server running on port " + PORT);
   });
