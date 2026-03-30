@@ -1,111 +1,84 @@
-import React, { useState } from "react";
-import PeachLogo from "../components/PeachLogo";
-import { useNavigate } from "react-router-dom";
-import { LayoutDashboard, Users, BarChart3, FileText, KeyRound, Shield } from "lucide-react";
+import { useState } from 'react';
+import { useNavigate, Navigate } from 'react-router-dom';
+import PeachLogo from '../components/PeachLogo';
 
-interface LoginProps { onLogin: (user: any) => void; }
-
-const FEATURES = [
-  { icon: LayoutDashboard, title: "Smart Dashboard", desc: "Revenue trends, top clients, and upcoming appointments at a glance." },
-  { icon: Users, title: "Client Management", desc: "Full profiles, history, notes and status tracking." },
-  { icon: BarChart3, title: "Revenue & P&L", desc: "Real-time profit tracking with expense breakdowns and charts." },
-  { icon: FileText, title: "Invoices", desc: "Create, send and track invoices with line items and due dates." },
-  { icon: KeyRound, title: "Client Portal", desc: "Give customers their own login to view appointments and invoices." },
-  { icon: Shield, title: "Secure & Private", desc: "Your data is fully isolated and protected." },
-];
-
-export default function Login({ onLogin }: LoginProps) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+export default function Login() {
   const navigate = useNavigate();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); setError(""); setLoading(true);
+  const token = localStorage.getItem('token');
+  const role = localStorage.getItem('role');
+  if (token && role === 'superadmin') return <Navigate to="/super" replace />;
+  if (token) return <Navigate to="/" replace />;
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(''); setLoading(true);
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST", headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({ email, password })
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
-      if (res.ok) {
-        onLogin(data.user);
-        navigate(data.user.role === 'customer' ? '/portal' : '/dashboard');
-      } else { setError(data.error || "Invalid email or password"); }
-    } catch { setError("Something went wrong. Try again."); }
-    finally { setLoading(false); }
-  };
+      if (!res.ok) throw new Error(data.error || 'Login failed');
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('role', data.user.role);
+      localStorage.setItem('businessId', String(data.user.businessId || ''));
+      if (data.user.role === 'superadmin') navigate('/super');
+      else navigate('/');
+    } catch (err: any) {
+      setError(err.message || 'Login failed');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
-    <div className="min-h-screen flex">
-      {/* Left panel */}
-      <div className="hidden lg:flex lg:w-[52%] bg-[#0f172a] flex-col justify-between p-12 relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-orange-500/5 rounded-full -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-64 h-64 bg-orange-500/5 rounded-full translate-y-1/2 -translate-x-1/2 pointer-events-none" />
-        <div className="flex items-center gap-3 relative z-10">
-          <PeachLogo size={40} />
-          <div>
-            <p className="font-bold text-white text-base leading-none tracking-tight">Peach Stack</p>
-            <p className="text-[10px] text-slate-500 font-medium uppercase tracking-widest mt-0.5">Business Platform</p>
+    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-amber-50 flex items-center justify-center p-4">
+      <div className="w-full max-w-sm">
+        <div className="text-center mb-8">
+          <div className="flex justify-center mb-4">
+            <PeachLogo size={48} />
           </div>
+          <h1 className="text-2xl font-bold text-gray-900">Welcome back</h1>
+          <p className="text-gray-500 text-sm mt-1">Sign in to your Peach Stack dashboard</p>
         </div>
-        <div className="relative z-10 space-y-6">
-          <div>
-            <h2 className="text-4xl font-bold text-white leading-tight">Run your business.<br /><span className="text-orange-400">Not your spreadsheets.</span></h2>
-            <p className="text-slate-400 mt-4 text-base leading-relaxed max-w-sm">Everything you need to manage clients, track revenue, and grow — in one place.</p>
-          </div>
-          <div className="grid grid-cols-1 gap-3 max-w-sm">
-            {FEATURES.map(f => (
-              <div key={f.title} className="flex items-start gap-3">
-                <div className="w-8 h-8 bg-orange-500/10 border border-orange-500/20 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
-                  <f.icon className="w-4 h-4 text-orange-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-200">{f.title}</p>
-                  <p className="text-xs text-slate-500 leading-relaxed">{f.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-        <p className="text-xs text-slate-600 relative z-10">Built by <span className="text-slate-400 font-semibold">Peach Stack</span> · Atlanta, GA</p>
-      </div>
-
-      {/* Right panel */}
-      <div className="flex-1 flex flex-col items-center justify-center bg-slate-50 p-8">
-        <div className="flex items-center gap-3 mb-10 lg:hidden">
-          <PeachLogo size={40} />
-          <p className="font-bold text-slate-900 text-base tracking-tight">Peach Stack</p>
-        </div>
-        <div className="w-full max-w-sm">
-          <div className="mb-8">
-            <h1 className="text-2xl font-bold text-slate-900">Welcome back</h1>
-            <p className="text-slate-500 text-sm mt-1">Sign in to your business account</p>
-          </div>
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1.5">Email address</label>
-              <input type="email" required value={email} onChange={e=>setEmail(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition-all text-sm shadow-sm"
-                placeholder="you@yourbusiness.com" autoComplete="email" />
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Email</label>
+              <input
+                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
+                type="email" value={email} onChange={e => setEmail(e.target.value)}
+                required autoFocus placeholder="you@yourbusiness.com"
+              />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1.5">Password</label>
-              <input type="password" required value={password} onChange={e=>setPassword(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition-all text-sm shadow-sm"
-                placeholder="••••••••" autoComplete="current-password" />
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Password</label>
+              <input
+                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
+                type="password" value={password} onChange={e => setPassword(e.target.value)}
+                required placeholder="••••••••"
+              />
             </div>
-            {error && <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-sm text-red-600 font-medium">{error}</div>}
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2.5">
+                <p className="text-red-600 text-xs">{error}</p>
+              </div>
+            )}
             <button type="submit" disabled={loading}
-              className="w-full py-3 bg-orange-500 text-white rounded-xl font-bold hover:bg-orange-400 transition-all shadow-lg shadow-orange-500/25 disabled:opacity-50 text-sm mt-2">
-              {loading ? "Signing in..." : "Sign in →"}
+              className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-60 text-white font-semibold py-2.5 rounded-xl transition-colors text-sm">
+              {loading ? 'Signing in...' : 'Sign In'}
             </button>
           </form>
-          <p className="text-center text-xs text-slate-400 mt-8">
-            Need access? Contact <span className="text-slate-600 font-semibold">Peach Stack</span> to get set up.
-          </p>
         </div>
+        <p className="text-center text-xs text-gray-400 mt-6">
+          Powered by <span className="font-semibold text-orange-500">Peach Stack</span> · Atlanta, GA
+        </p>
       </div>
     </div>
   );
