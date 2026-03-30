@@ -10,7 +10,9 @@ const FEATURES = [
   'Business insights at a glance',
 ];
 
-export default function Login() {
+interface Props { onLogin: (user: any) => void; }
+
+export default function Login({ onLogin }: Props) {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -33,6 +35,7 @@ export default function Login() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Login failed');
+      onLogin(data.user);
       localStorage.setItem('token', data.token);
       localStorage.setItem('role', data.user.role);
       localStorage.setItem('businessId', String(data.user.businessId || ''));

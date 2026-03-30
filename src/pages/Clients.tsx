@@ -59,7 +59,9 @@ export default function Clients() {
     if (searchVal !== null) setSearch(searchVal);
     if (searchParams.get("add") === "true") {
       setIsModalOpen(true);
-      const p = new URLSearchParams(searchParams); p.delete("add"); setSearchParams(p);
+      const p = new URLSearchParams(searchParams);
+      p.delete("add");
+      setSearchParams(p, { replace: true });
     }
   }, [searchParams]);
 
@@ -101,6 +103,7 @@ export default function Clients() {
 
   const handleRevokeAccess = async (client: any) => {
     if (!window.confirm(`Revoke portal access for ${client.name}?`)) return;
+    if (!client?.portal_user?.id) return;
     await fetch(`/api/accounts/${client.portal_user.id}`, { method: "DELETE" });
     load();
   };
