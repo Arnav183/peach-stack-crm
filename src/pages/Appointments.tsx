@@ -64,7 +64,9 @@ export default function Appointments() {
   useEffect(() => {
     if (searchParams.get("add") === "true") {
       setShowModal(true);
-      const p = new URLSearchParams(searchParams); p.delete("add"); setSearchParams(p);
+      const p = new URLSearchParams(searchParams);
+      p.delete("add");
+      setSearchParams(p, { replace: true });
     }
   }, [searchParams]);
 

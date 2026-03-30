@@ -18,7 +18,8 @@ export default function Accounts() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api('/auth/me').then(u => {
+    api('/auth/me').then(d => {
+      const u = d?.user || {};
       setProfile({ name: u.name || '', email: u.email || '' });
     }).finally(() => setLoading(false));
   }, []);

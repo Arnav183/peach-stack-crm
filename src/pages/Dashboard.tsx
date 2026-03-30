@@ -5,6 +5,7 @@ import { format, parseISO } from "date-fns";
 import { Link } from "react-router-dom";
 
 const ACCENT = "#f97316";
+const DEFAULT_INITIAL = "N";
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
@@ -156,7 +157,7 @@ export default function Dashboard() {
               {(stats.nextAppointments || []).slice(0, 5).map((appt: any) => (
                 <div key={appt.id} className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-xl bg-orange-50 flex items-center justify-center text-orange-500 shrink-0 text-xs font-bold border border-orange-100">
-                    {appt.client_name.split(' ').map((n: any) => n[0]).join('')}
+                    {(appt.client_name || DEFAULT_INITIAL).split(' ').filter(Boolean).map((n: any) => n[0]).join('')}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-slate-800 truncate">{appt.client_name}</p>
@@ -218,7 +219,7 @@ export default function Dashboard() {
                   className="flex items-center gap-4 px-6 py-3.5 hover:bg-slate-50 transition-colors group">
                   <span className="text-xs font-bold text-slate-300 w-4 shrink-0">{i + 1}</span>
                   <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
-                    {client.name.split(' ').map((n: any) => n[0]).join('')}
+                    {(client.name || DEFAULT_INITIAL).split(' ').filter(Boolean).map((n: any) => n[0]).join('')}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-slate-800 group-hover:text-orange-500 transition-colors truncate">{client.name}</p>

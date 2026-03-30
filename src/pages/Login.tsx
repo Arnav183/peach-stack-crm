@@ -10,7 +10,10 @@ const FEATURES = [
   'Business insights at a glance',
 ];
 
-export default function Login() {
+type LoginUser = { role: string; [key: string]: unknown };
+interface LoginProps { onLogin: (user: LoginUser) => void; }
+
+export default function Login({ onLogin }: LoginProps) {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -36,6 +39,7 @@ export default function Login() {
       localStorage.setItem('token', data.token);
       localStorage.setItem('role', data.user.role);
       localStorage.setItem('businessId', String(data.user.businessId || ''));
+      onLogin(data.user);
       if (data.user.role === 'superadmin') navigate('/super');
       else navigate('/');
     } catch (err: any) {
