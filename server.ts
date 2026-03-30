@@ -1,4 +1,5 @@
 import express from "express";
+import type { Request } from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -27,6 +28,8 @@ const DB_PATH = path.join(process.cwd(), "crm.db");
 const TEMP_PASSWORD_CHARS = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789!@#";
 const TEMP_PASSWORD_LENGTH = 12;
 const MIN_DURATION_MINUTES = 5;
+type SessionUser = { id?: number; role?: string };
+type AuthenticatedRequest = Request & { user?: SessionUser };
 const DEFAULT_SERVICE_SET = [
   { name: "Brow Threading", duration: 30, price: 25, category: "Beauty" },
   { name: "Full Face Threading", duration: 45, price: 45, category: "Beauty" },
@@ -1151,7 +1154,7 @@ app.put('/api/auth/change-password', auth, (req: any, res: any) => {
 // ââ Plan & Invoice routes âââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 // Update a business plan_services and recalculate mrr
-app.put('/api/super/businesses/:id/plan', auth, superadminOnly, createRouteRateLimiter("superadmin_plan_write", 60, 60 * 1000), (req: any, res) => {
+app.put('/api/super/businesses/:id/plan', auth, superadminOnly, createRouteRateLimiter("superadmin_plan_write", 60, 60 * 1000), (req: AuthenticatedRequest, res) => {
   const planRateLimit = checkIntegrationRateLimit(`superadmin-plan:${req.user?.id || "anon"}:${req.ip || "unknown"}`);
   if (!planRateLimit.allowed) return res.status(429).json({ error: `Too many requests. Try again in ${planRateLimit.retryAfter}s` });
   const { plan_services } = req.body; // array of service IDs
@@ -1171,7 +1174,7 @@ app.put('/api/super/businesses/:id/plan', auth, superadminOnly, createRouteRateL
   }
 });
 
-app.post("/api/super/businesses/:id/templates/:serviceId/apply", auth, superadminOnly, createRouteRateLimiter("superadmin_template_apply", 60, 60 * 1000), (req: any, res) => {
+app.post("/api/super/businesses/:id/templates/:serviceId/apply", auth, superadminOnly, createRouteRateLimiter("superadmin_template_apply", 60, 60 * 1000), (req: AuthenticatedRequest, res) => {
   const templateRateLimit = checkIntegrationRateLimit(`superadmin-template:${req.user?.id || "anon"}:${req.ip || "unknown"}`);
   if (!templateRateLimit.allowed) return res.status(429).json({ error: `Too many requests. Try again in ${templateRateLimit.retryAfter}s` });
   const serviceId = String(req.params.serviceId || "").trim();
