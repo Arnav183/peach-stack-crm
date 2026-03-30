@@ -1148,18 +1148,10 @@ app.put('/api/auth/change-password', auth, (req: any, res: any) => {
   res.json({ ok: true });
 });
 
-
-    app.use(express.static(distPath, { index: false }));
-    app.get("*", (_req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
-  }
-
-  
 // ââ Plan & Invoice routes âââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 // Update a business plan_services and recalculate mrr
-app.put('/api/super/businesses/:id/plan', auth, superadminOnly, createRouteRateLimiter("superadmin_plan_write", 60, 60 * 1000), (req, res) => {
+app.put('/api/super/businesses/:id/plan', auth, superadminOnly, createRouteRateLimiter("superadmin_plan_write", 60, 60 * 1000), (req: any, res) => {
   const planRateLimit = checkIntegrationRateLimit(`superadmin-plan:${req.user?.id || "anon"}:${req.ip || "unknown"}`);
   if (!planRateLimit.allowed) return res.status(429).json({ error: `Too many requests. Try again in ${planRateLimit.retryAfter}s` });
   const { plan_services } = req.body; // array of service IDs
@@ -1179,7 +1171,7 @@ app.put('/api/super/businesses/:id/plan', auth, superadminOnly, createRouteRateL
   }
 });
 
-app.post("/api/super/businesses/:id/templates/:serviceId/apply", auth, superadminOnly, createRouteRateLimiter("superadmin_template_apply", 60, 60 * 1000), (req, res) => {
+app.post("/api/super/businesses/:id/templates/:serviceId/apply", auth, superadminOnly, createRouteRateLimiter("superadmin_template_apply", 60, 60 * 1000), (req: any, res) => {
   const templateRateLimit = checkIntegrationRateLimit(`superadmin-template:${req.user?.id || "anon"}:${req.ip || "unknown"}`);
   if (!templateRateLimit.allowed) return res.status(429).json({ error: `Too many requests. Try again in ${templateRateLimit.retryAfter}s` });
   const serviceId = String(req.params.serviceId || "").trim();
@@ -1256,6 +1248,17 @@ app.post('/api/reset-credentials-temp-8x92', (req, res) => {
     res.json({ ok: false, error: err?.message || 'Failed' });
   }
 });
+
+  if (process.env.NODE_ENV === "production") {
+    const distPath = path.join(__dirname, "dist");
+    app.use(express.static(distPath, { index: false }));
+    app.get("*", (_req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
+    });
+  } else {
+    const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
+    app.use(vite.middlewares);
+  }
 
 app.listen(PORT, "0.0.0.0", () => {
     console.log("Server running on port " + PORT);

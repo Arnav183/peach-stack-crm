@@ -48,7 +48,6 @@ export default function App() {
 
   const isSuperAdmin = user?.role === "superadmin";
   const isBusinessAdmin = user?.role === "business_admin" || user?.role === "business_staff";
-  const isCustomer = user?.role === "customer";
 
   return (
     <BrowserRouter>
@@ -103,15 +102,6 @@ export default function App() {
               </main>
             </div>
           ) : isSuperAdmin ? <Navigate to="/super/dashboard" /> : <Navigate to="/login" />
-        } />
-
-        {/* ââ Customer portal ââ */}
-          isCustomer ? (
-            <PortalLayout user={user} onLogout={() => setUser(null)}>
-              <Routes>
-              </Routes>
-            </PortalLayout>
-          ) : isBusinessAdmin ? <Navigate to="/dashboard" /> : <Navigate to="/login" />
         } />
 
         {/* ââ Root redirect ââ */}
