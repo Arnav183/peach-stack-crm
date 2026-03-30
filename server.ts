@@ -1127,147 +1127,30 @@ async function startServer() {
     res.json(payload);
   });
 
-  // PORTAL (customer-facing)
-  app.get("/api/portal/me", auth, (req: any, res) => {
-    if (req.user.role !== "customer") return res.status(403).json({ error: "Customer only" });
-    const portalUser = db.prepare("SELECT id, email, business_id, client_id FROM users WHERE id=? AND role='customer'").get(req.user.id) as any;
-    if (!portalUser) return res.status(404).json({ error: "Not found" });
-    const client = portalUser.client_id
-      ? db.prepare("SELECT id,name,email,phone,status FROM clients WHERE business_id=? AND id=?").get(req.user.business_id, portalUser.client_id) as any
-      : db.prepare("SELECT id,name,email,phone,status FROM clients WHERE business_id=? AND email=?").get(req.user.business_id, portalUser.email) as any;
-    if (!client) return res.status(404).json({ error: "Not found" });
-    const appointments = db.prepare("SELECT * FROM appointments WHERE client_id=? AND business_id=? ORDER BY date DESC").all(client.id, req.user.business_id);
-    const invoices = db.prepare("SELECT * FROM invoices WHERE client_id=? AND business_id=? ORDER BY created_at DESC").all(client.id, req.user.business_id);
-    const stats = db.prepare("SELECT COUNT(*) as total_visits, COALESCE(SUM(price+tip),0) as total_spent, MAX(date) as last_visit FROM appointments WHERE client_id=? AND business_id=? AND status='Completed'").get(client.id, req.user.business_id) as any;
-    const nextAppt = db.prepare("SELECT * FROM appointments WHERE client_id=? AND business_id=? AND date>datetime('now') ORDER BY date ASC LIMIT 1").get(client.id, req.user.business_id);
-    const owed = (db.prepare("SELECT COALESCE(SUM(amount),0) as t FROM invoices WHERE client_id=? AND business_id=? AND status='Unpaid'").get(client.id, req.user.business_id) as any).t;
-    res.json({ client, appointments, invoices, stats, nextAppt, outstandingAmount: owed });
-  });
-  app.put("/api/portal/profile", auth, (req: any, res) => {
-    if (req.user.role !== "customer") return res.status(403).json({ error: "Customer only" });
-    const { name, email, phone } = req.body;
-    const portalUser = db.prepare("SELECT id, email, business_id, client_id FROM users WHERE id=? AND role='customer'").get(req.user.id) as any;
-    if (!portalUser) return res.status(404).json({ error: "Not found" });
-    const client = portalUser.client_id
-      ? db.prepare("SELECT id FROM clients WHERE business_id=? AND id=?").get(req.user.business_id, portalUser.client_id) as any
-      : db.prepare("SELECT id FROM clients WHERE business_id=? AND email=?").get(req.user.business_id, portalUser.email) as any;
-    if (client) db.prepare("UPDATE clients SET name=?,email=?,phone=? WHERE id=? AND business_id=?").run(name, email, phone, client.id, req.user.business_id);
-    res.json({ ok: true });
-  });
-  // Static serving
-  const distPath = path.join(process.cwd(), "dist");
-  const hasDist = existsSync(distPath);
-  if (!hasDist) {
-    const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
-    app.use(vite.middlewares);
-  } else {
-    app.use(express.static(distPath, { index: false }));
-    app.get("*", (_req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
-  }
 
-  
-// ── Plan & Invoice routes ─────────────────────────────────────────────────────
-
-// Update a business plan_services and recalculate mrr
-app.put('/api/super/businesses/:id/plan', auth, superadminOnly, createRouteRateLimiter("superadmin_plan_write", 60, 60 * 1000), (req, res) => {
-  const planRateLimit = checkIntegrationRateLimit(`superadmin-plan:${req.user?.id || "anon"}:${req.ip || "unknown"}`);
-  if (!planRateLimit.allowed) return res.status(429).json({ error: `Too many requests. Try again in ${planRateLimit.retryAfter}s` });
-  const { plan_services } = req.body; // array of service IDs
-  if (!Array.isArray(plan_services)) return res.status(400).json({ error: 'plan_services must be an array' });
-  const biz = db.prepare("SELECT id, name, industry, settings FROM businesses WHERE id=?").get(req.params.id) as any;
-  if (!biz) return res.status(404).json({ error: "Business not found" });
-  const normalizedServices = normalizePlanServices(plan_services);
-  const mrr = normalizedServices.reduce((sum: number, id: string) => sum + (MONTHLY_SERVICE_PRICING[id] || 0), 0);
-  const nextSettings = applyServiceTemplates(biz.settings, { name: biz.name, industry: biz.industry }, normalizedServices, false);
-
-  try {
-    db.prepare('UPDATE businesses SET plan_services = ?, mrr = ?, settings = ? WHERE id = ?')
-      .run(JSON.stringify(normalizedServices), mrr, JSON.stringify(nextSettings), req.params.id);
-    res.json({ success: true, mrr, plan_services: normalizedServices, settings: nextSettings });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message || 'Failed to save plan' });
-  }
+// ── ACCOUNT MANAGEMENT ────────────────────────────────────────────────────────
+app.put('/api/auth/update-profile', auth, (req: any, res: any) => {
+  const { name, email } = req.body;
+  if (!name || !email) return res.status(400).json({ error: 'Name and email required' });
+  // Check email not taken by another user
+  const existing = db.prepare('SELECT id FROM users WHERE email = ? AND id != ?').get(email, req.user.id);
+  if (existing) return res.status(400).json({ error: 'Email already in use' });
+  db.prepare('UPDATE users SET name = ?, email = ? WHERE id = ?').run(name, email, req.user.id);
+  const updated = db.prepare('SELECT id, name, email, role FROM users WHERE id = ?').get(req.user.id);
+  res.json(updated);
 });
 
-app.post("/api/super/businesses/:id/templates/:serviceId/apply", auth, superadminOnly, createRouteRateLimiter("superadmin_template_apply", 60, 60 * 1000), (req, res) => {
-  const templateRateLimit = checkIntegrationRateLimit(`superadmin-template:${req.user?.id || "anon"}:${req.ip || "unknown"}`);
-  if (!templateRateLimit.allowed) return res.status(429).json({ error: `Too many requests. Try again in ${templateRateLimit.retryAfter}s` });
-  const serviceId = String(req.params.serviceId || "").trim();
-  if (!SERVICE_TEMPLATE_CATALOG[serviceId]) return res.status(400).json({ error: "Unknown service" });
-  const force = Boolean(req.body?.force);
-  const biz = db.prepare("SELECT id, name, industry, settings, plan_services FROM businesses WHERE id=?").get(req.params.id) as any;
-  if (!biz) return res.status(404).json({ error: "Business not found" });
-  const existingServices = normalizePlanServices(biz.plan_services);
-  const nextServices = Array.from(new Set([...existingServices, serviceId]));
-  const nextSettings = applyServiceTemplates(biz.settings, { name: biz.name, industry: biz.industry }, [serviceId], force);
-  const mrr = nextServices.reduce((sum: number, id: string) => sum + (MONTHLY_SERVICE_PRICING[id] || 0), 0);
-  db.prepare("UPDATE businesses SET plan_services = ?, mrr = ?, settings = ? WHERE id = ?")
-    .run(JSON.stringify(nextServices), mrr, JSON.stringify(nextSettings), req.params.id);
-  const template = nextSettings?.serviceTemplates?.[serviceId] || null;
-  res.json({ success: true, serviceId, mrr, plan_services: nextServices, settings: nextSettings, template });
+app.put('/api/auth/change-password', auth, (req: any, res: any) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Both passwords required' });
+  if (newPassword.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id) as any;
+  if (!bcrypt.compareSync(currentPassword, user.password)) return res.status(401).json({ error: 'Current password is incorrect' });
+  const hash = bcrypt.hashSync(newPassword, 10);
+  db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hash, req.user.id);
+  res.json({ ok: true });
 });
 
-// Get invoices for a business (last 3 months + next 3 months)
-app.get('/api/super/businesses/:id/invoices', auth, superadminOnly, (req, res) => {
-  const bizId = parseInt(req.params.id);
-  const biz = db.prepare('SELECT name, mrr, plan_services FROM businesses WHERE id = ?').get(bizId) as any;
-  if (!biz) return res.status(404).json({ error: 'Business not found' });
-
-  const mrr = biz.mrr || 0;
-  const now = new Date();
-  const invoices = [];
-
-  // Past 3 months (paid)
-  for (let i = 3; i >= 1; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    invoices.push({
-      id: 'inv-past-' + i,
-      period: d.toLocaleString('default', { month: 'long', year: 'numeric' }),
-      amount: mrr,
-      status: 'paid',
-      due_date: new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0],
-    });
-  }
-
-  // Current month (due)
-  invoices.push({
-    id: 'inv-current',
-    period: now.toLocaleString('default', { month: 'long', year: 'numeric' }),
-    amount: mrr,
-    status: 'due',
-    due_date: new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0],
-  });
-
-  // Next 2 months (upcoming)
-  for (let i = 1; i <= 2; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-    invoices.push({
-      id: 'inv-upcoming-' + i,
-      period: d.toLocaleString('default', { month: 'long', year: 'numeric' }),
-      amount: mrr,
-      status: 'upcoming',
-      due_date: d.toISOString().split('T')[0],
-    });
-  }
-
-  res.json({ business_name: biz.name, mrr, plan_services: JSON.parse(biz.plan_services || '[]'), invoices });
-});
-
-
-// TEMP: one-time password reset — remove after use
-app.post('/api/reset-credentials-temp-8x92', (req, res) => {
-  const adminHash = bcrypt.hashSync('PeachStack$105', 10);
-  const demoHash  = bcrypt.hashSync('demo1234', 10);
-  try {
-    db.prepare("UPDATE users SET password=? WHERE email='admin@peachstack.dev'").run(adminHash);
-    db.prepare("UPDATE users SET password=? WHERE email='priya@luxethreading.com'").run(demoHash);
-    res.json({ ok: true, error: null });
-  } catch (err: any) {
-    res.json({ ok: false, error: err?.message || 'Failed' });
-  }
-});
 
 app.listen(PORT, "0.0.0.0", () => {
     console.log("Server running on port " + PORT);
