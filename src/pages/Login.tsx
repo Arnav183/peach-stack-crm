@@ -81,7 +81,7 @@ export default function Login({ onLogin }: LoginProps) {
         </div>
 
         <div className="text-gray-600 text-xs">
-          Peach Stack · Atlanta, GA · ship real.
+          Peach Stack · Atlanta, GA
         </div>
       </div>
 
