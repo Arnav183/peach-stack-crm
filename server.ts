@@ -304,13 +304,6 @@ const db = new Database(DB_PATH);
 db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
 
-const badAppointmentsCleanup = db.prepare(
-  `DELETE FROM appointments WHERE date LIKE '% %' OR date LIKE '%st%' OR date LIKE '%nd%' OR date LIKE '%rd%' OR date LIKE '%th%'`
-).run();
-if (badAppointmentsCleanup.changes > 0) {
-  console.log(`Removed ${badAppointmentsCleanup.changes} malformed appointments during startup cleanup`);
-}
-
 db.exec(`
   CREATE TABLE IF NOT EXISTS businesses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -388,6 +381,12 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 `);
+const badAppointmentsCleanupResult = db.prepare(
+  `DELETE FROM appointments WHERE date LIKE '% %' OR date LIKE '%st%' OR date LIKE '%nd%' OR date LIKE '%rd%' OR date LIKE '%th%'`
+).run();
+if (badAppointmentsCleanupResult.changes > 0) {
+  console.log(`Removed ${badAppointmentsCleanupResult.changes} malformed appointments during startup cleanup`);
+}
 // Migrations â keep existing data, add new columns safely
 const migrations = [
   "ALTER TABLE users ADD COLUMN business_id INTEGER REFERENCES businesses(id)",
