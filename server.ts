@@ -1,6 +1,5 @@
 import express from "express";
 import type { Request, Response } from "express";
-import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import { existsSync, unlinkSync } from "fs";
@@ -1338,6 +1337,7 @@ app.post('/api/appointments/public', createRouteRateLimiter('public-booking-webh
       res.sendFile(path.join(distPath, "index.html"));
     });
   } else {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
     app.use(vite.middlewares);
   }
