@@ -1299,13 +1299,15 @@ app.post('/api/appointments/public', createRouteRateLimiter('public-booking-webh
 
   if (!client) {
     const inserted = db.prepare(`
-      INSERT INTO clients (name, email, business_id, created_at)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO clients (business_id, name, email, phone, notes, status)
+      VALUES (?, ?, ?, ?, ?, ?)
     `).run(
+      business.id,
       client_name,
       client_email || '',
-      business.id,
-      new Date().toISOString()
+      '',
+      '',
+      'New'
     );
     client = { id: inserted.lastInsertRowid };
   }
@@ -1313,18 +1315,21 @@ app.post('/api/appointments/public', createRouteRateLimiter('public-booking-webh
   // 5. Create the appointment — status starts as 'pending'
   // Sarah sees it in her dashboard and clicks Confirm
   db.prepare(`
-    INSERT INTO appointments
-      (client_id, client_name, business_id, service, date, time, status, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO appointments 
+      (business_id, client_id, service, staff, date, duration, price, tip, is_walkin, status, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    client.id,
-    client_name,
     business.id,
+    client.id,
     service,
-    date,
-    time || '',
+    '',
+    date + (time ? ' ' + time : ''),
+    0,
+    0,
+    0,
+    0,
     'pending',
-    new Date().toISOString()
+    ''
   );
 
   res.json({ ok: true });
