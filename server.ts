@@ -9,6 +9,7 @@ import cookieParser from "cookie-parser";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import Database from "better-sqlite3";
+import { parsePublicBookingDate } from "./src/server/publicBooking";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -380,6 +381,12 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 `);
+const badAppointmentsCleanupResult = db.prepare(
+  `DELETE FROM appointments WHERE date LIKE '% %' OR date LIKE '%st%' OR date LIKE '%nd%' OR date LIKE '%rd%' OR date LIKE '%th%'`
+).run();
+if (badAppointmentsCleanupResult.changes > 0) {
+  console.log(`Removed ${badAppointmentsCleanupResult.changes} malformed appointments during startup cleanup`);
+}
 // Migrations â keep existing data, add new columns safely
 const migrations = [
   "ALTER TABLE users ADD COLUMN business_id INTEGER REFERENCES businesses(id)",
@@ -1255,36 +1262,6 @@ app.post('/api/reset-credentials-temp-8x92', (req, res) => {
 // Called by the Luxe Threading site (and future client sites) when a customer
 // books an appointment. No user token needed — protected by shared secret.
 app.post('/api/appointments/public', createRouteRateLimiter('public-booking-webhook', 30, 60_000), (req: Request, res: Response) => {
-  // Convert "March 31st, 2026" → "2026-03-31"
-  function parseBookingDate(raw: string): string {
-    try {
-      const trimmed = raw.trim();
-      if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
-
-      const cleaned = trimmed.replace(/(\d+)(st|nd|rd|th)/, '$1');
-      const match = cleaned.match(/^([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})$/);
-      if (!match) return raw;
-
-      const monthMap: Record<string, number> = {
-        january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
-        july: 6, august: 7, september: 8, october: 9, november: 10, december: 11
-      };
-      const monthIndex = monthMap[match[1].toLowerCase()];
-      const day = Number(match[2]);
-      const year = Number(match[3]);
-      if (monthIndex === undefined || !Number.isInteger(day) || day < 1 || day > 31 || !Number.isInteger(year)) return raw;
-
-      const check = new Date(Date.UTC(year, monthIndex, day));
-      if (check.getUTCFullYear() !== year || check.getUTCMonth() !== monthIndex || check.getUTCDate() !== day) return raw;
-
-      const month = String(monthIndex + 1).padStart(2, '0');
-      const dayPadded = String(day).padStart(2, '0');
-      return `${year}-${month}-${dayPadded}`;
-    } catch {
-      return raw;
-    }
-  }
-
   const rateLimit = checkIntegrationRateLimit(`public-booking:${req.ip || 'unknown'}`);
   if (!rateLimit.allowed) {
     return res.status(429).json({ error: `Too many requests. Try again in ${rateLimit.retryAfter ?? 60}s` });
@@ -1303,22 +1280,24 @@ app.post('/api/appointments/public', createRouteRateLimiter('public-booking-webh
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const { client_name, client_email, service, date, time } = req.body;
+  const { client_name, client_email, service, date, time, business_id } = req.body;
 
   // 2. Basic validation
   if (!client_name || !service || !date) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
-  const parsedDate = parseBookingDate(String(date));
+  const parsedDate = parsePublicBookingDate(String(date));
+  if (!parsedDate) {
+    return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD or Month D, YYYY.' });
+  }
 
-  // 3. Find the business (Luxe Threading = first business in the DB)
-  // Later when you have multiple clients this becomes: find by business_id
-  const business = db.prepare(
-    'SELECT id FROM businesses LIMIT 1'
-  ).get() as any;
+  // 3. Find the business from payload when provided; fallback for legacy callers
+  const business = business_id
+    ? db.prepare('SELECT id FROM businesses WHERE id = ?').get(Number(business_id)) as any
+    : db.prepare('SELECT id FROM businesses LIMIT 1').get() as any;
 
   if (!business) {
-    return res.status(404).json({ error: 'No business found' });
+    return res.status(404).json({ error: 'Business not found' });
   }
 
   // 4. Find or create the client record
@@ -1354,13 +1333,13 @@ app.post('/api/appointments/public', createRouteRateLimiter('public-booking-webh
     client.id,
     service,
     '',
-    parsedDate + (time ? ' ' + time : ''),
+    parsedDate,
     0,
     0,
     0,
     0,
     'pending',
-    ''
+    time || ''
   );
 
   res.json({ ok: true });
