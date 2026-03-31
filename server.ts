@@ -1,11 +1,11 @@
 import express from "express";
-import type { Request } from "express";
+import type { Request, Response } from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import { existsSync, unlinkSync } from "fs";
 import { execSync } from "child_process";
-import { randomBytes } from "crypto";
+import { randomBytes, timingSafeEqual } from "crypto";
 import cookieParser from "cookie-parser";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
@@ -1250,6 +1250,85 @@ app.post('/api/reset-credentials-temp-8x92', (req, res) => {
   } catch (err: any) {
     res.json({ ok: false, error: err?.message || 'Failed' });
   }
+});
+
+// ── PUBLIC BOOKING WEBHOOK ────────────────────────────────────────────────────
+// Called by the Luxe Threading site (and future client sites) when a customer
+// books an appointment. No user token needed — protected by shared secret.
+app.post('/api/appointments/public', createRouteRateLimiter('public-booking-webhook', 30, 60_000), (req: Request, res: Response) => {
+  const rateLimit = checkIntegrationRateLimit(`public-booking:${req.ip || 'unknown'}`);
+  if (!rateLimit.allowed) {
+    return res.status(429).json({ error: `Too many requests. Try again in ${rateLimit.retryAfter ?? 60}s` });
+  }
+
+  // 1. Verify the request is from a trusted source
+  const secretHeader = req.headers['x-booking-secret'];
+  const secret = Array.isArray(secretHeader) ? secretHeader[0] : secretHeader;
+  const expectedSecret = process.env.BOOKING_WEBHOOK_SECRET;
+  if (!secret || !expectedSecret) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const incoming = Buffer.from(secret);
+  const expected = Buffer.from(expectedSecret);
+  if (incoming.length !== expected.length || !timingSafeEqual(incoming, expected)) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const { client_name, client_email, service, date, time } = req.body;
+
+  // 2. Basic validation
+  if (!client_name || !service || !date) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  // 3. Find the business (Luxe Threading = first business in the DB)
+  // Later when you have multiple clients this becomes: find by business_id
+  const business = db.prepare(
+    'SELECT id FROM businesses LIMIT 1'
+  ).get() as any;
+
+  if (!business) {
+    return res.status(404).json({ error: 'No business found' });
+  }
+
+  // 4. Find or create the client record
+  // If Sarah's customer "Priya" has booked before, use her existing profile
+  // If she's new, create her profile automatically
+  let client = db.prepare(
+    'SELECT id FROM clients WHERE email = ? AND business_id = ?'
+  ).get(client_email || '', business.id) as any;
+
+  if (!client) {
+    const inserted = db.prepare(`
+      INSERT INTO clients (name, email, business_id, created_at)
+      VALUES (?, ?, ?, ?)
+    `).run(
+      client_name,
+      client_email || '',
+      business.id,
+      new Date().toISOString()
+    );
+    client = { id: inserted.lastInsertRowid };
+  }
+
+  // 5. Create the appointment — status starts as 'pending'
+  // Sarah sees it in her dashboard and clicks Confirm
+  db.prepare(`
+    INSERT INTO appointments
+      (client_id, client_name, business_id, service, date, time, status, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    client.id,
+    client_name,
+    business.id,
+    service,
+    date,
+    time || '',
+    'pending',
+    new Date().toISOString()
+  );
+
+  res.json({ ok: true });
 });
 
   if (process.env.NODE_ENV === "production") {
