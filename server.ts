@@ -1255,6 +1255,36 @@ app.post('/api/reset-credentials-temp-8x92', (req, res) => {
 // Called by the Luxe Threading site (and future client sites) when a customer
 // books an appointment. No user token needed — protected by shared secret.
 app.post('/api/appointments/public', createRouteRateLimiter('public-booking-webhook', 30, 60_000), (req: Request, res: Response) => {
+  // Convert "March 31st, 2026" → "2026-03-31"
+  function parseBookingDate(raw: string): string {
+    try {
+      const trimmed = raw.trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+
+      const cleaned = trimmed.replace(/(\d+)(st|nd|rd|th)/, '$1');
+      const match = cleaned.match(/^([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})$/);
+      if (!match) return raw;
+
+      const monthMap: Record<string, number> = {
+        january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
+        july: 6, august: 7, september: 8, october: 9, november: 10, december: 11
+      };
+      const monthIndex = monthMap[match[1].toLowerCase()];
+      const day = Number(match[2]);
+      const year = Number(match[3]);
+      if (monthIndex === undefined || !Number.isInteger(day) || day < 1 || day > 31 || !Number.isInteger(year)) return raw;
+
+      const check = new Date(Date.UTC(year, monthIndex, day));
+      if (check.getUTCFullYear() !== year || check.getUTCMonth() !== monthIndex || check.getUTCDate() !== day) return raw;
+
+      const month = String(monthIndex + 1).padStart(2, '0');
+      const dayPadded = String(day).padStart(2, '0');
+      return `${year}-${month}-${dayPadded}`;
+    } catch {
+      return raw;
+    }
+  }
+
   const rateLimit = checkIntegrationRateLimit(`public-booking:${req.ip || 'unknown'}`);
   if (!rateLimit.allowed) {
     return res.status(429).json({ error: `Too many requests. Try again in ${rateLimit.retryAfter ?? 60}s` });
@@ -1279,6 +1309,7 @@ app.post('/api/appointments/public', createRouteRateLimiter('public-booking-webh
   if (!client_name || !service || !date) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
+  const parsedDate = parseBookingDate(String(date));
 
   // 3. Find the business (Luxe Threading = first business in the DB)
   // Later when you have multiple clients this becomes: find by business_id
@@ -1323,7 +1354,7 @@ app.post('/api/appointments/public', createRouteRateLimiter('public-booking-webh
     client.id,
     service,
     '',
-    date + (time ? ' ' + time : ''),
+    parsedDate + (time ? ' ' + time : ''),
     0,
     0,
     0,
