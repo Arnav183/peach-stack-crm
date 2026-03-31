@@ -1265,10 +1265,10 @@ app.post('/api/appointments/public', createRouteRateLimiter('public-booking-webh
   const secretHeader = req.headers['x-booking-secret'];
   const secret = Array.isArray(secretHeader) ? secretHeader[0] : secretHeader;
   const expectedSecret = process.env.BOOKING_WEBHOOK_SECRET;
-  if (!secret || !expectedSecret) {
+  if (typeof secret !== 'string' || secret.length === 0 || !expectedSecret) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
-  const incoming = Buffer.from(secret);
+  const incoming = Buffer.from(secret, 'utf8');
   const expected = Buffer.from(expectedSecret);
   if (incoming.length !== expected.length || !timingSafeEqual(incoming, expected)) {
     return res.status(401).json({ error: 'Unauthorized' });
